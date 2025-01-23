@@ -90,9 +90,9 @@ def appmain(*args, **kwargs):
     with SysTrayIcon(icon_path, "PyroGyro", menu_options, on_quit=on_quit_callback) as systray:
         init_sdl()
 
-        #gamepad = vg.VX360Gamepad()
+        gamepad = vg.VX360Gamepad()
         time.sleep(1)
-        #GAMEPADS.append(gamepad)
+        GAMEPADS.append(gamepad)
         pads = get_gamepads(vpads=GAMEPADS)
         print(pads)
         

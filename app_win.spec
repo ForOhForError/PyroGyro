@@ -6,6 +6,7 @@ import vgamepad
 import sdl3
 import platform
 from ctypes import CDLL
+import sys
 
 hiddenimports = []
 hiddenimports += collect_submodules('pyrogyro')
@@ -13,6 +14,7 @@ hiddenimports += collect_submodules('pyrogyro')
 options = [ ('v', None, 'OPTION')]
 block_cipher = None
 
+from unittest.mock import patch
 
 if platform.architecture()[0] == "64bit":
     arch = "x64"
@@ -22,6 +24,7 @@ path_vigem_client = Path(vgamepad.__file__).parent.absolute() / "win" / "vigem" 
 path_sdl = Path(sdl3.__file__).parent.absolute() / "bin" / f"windows-amd{arch[1:]}"
 
 print(Path(sdl3.__file__).parent.absolute())
+
 
 a = Analysis(
     ['pyrogyro/pyrogyro.py'],
@@ -37,7 +40,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['pyrogyro/runtime_hook.py'],
-    excludes=[],
+    excludes=[''],
     noarchive=False,
     optimize=0,
     win_no_prefer_redirects=False,
@@ -67,4 +70,4 @@ exe = EXE(
     entitlements_file=None,
     clean=True,
     icon='res/pyrogyro.ico',
-)
+    )

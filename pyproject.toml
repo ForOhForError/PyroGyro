@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "pyrogyro"
+version = "0.1.0"
+description = "Yet Another (Gyro) Gamepad Mapper, written in Python for hackability"
+authors = ["ForOhForError"]
+packages = [{include = "pyrogyro"}]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.14"
+pysdl3 = "^0.9.1b2"
+vgamepad = "^0.1.0"
+infi-systray = "^0.1.12.1"
+pyautogui = "^0.9.54"
+flask = "^3.1.0"
+flask-sock = "^0.7.0"
+
+[tool.poetry.scripts]
+pyrogyro = "pyrogyro.pyrogyro:appmain"
+dist = "pyrogyro.installer:install_win"
+
+[tool.poetry.group.dev.dependencies]
+pyinstaller = "^6.11.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -6,6 +6,7 @@ import ctypes
 import vgamepad as vg
 import sdl3
 import uuid
+import platform
 
 from pathlib import Path
 
@@ -14,107 +15,118 @@ import time
 import sys
 
 from infi.systray import SysTrayIcon
-
-kernel32 = ctypes.WinDLL('kernel32')
-user32 = ctypes.WinDLL('user32')
 import threading
 
 import pyautogui
 
+SDLCALL = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event))
 
-def init_sdl():
-    sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS.encode(), "1".encode())
-    sdl3.SDL_Init(sdl3.SDL_INIT_GAMEPAD)
-    
-def get_gamepads(vpads=[], ignore_virtual=True):
-    ignore_list = set(( (vpad.get_vid(), vpad.get_pid()) for vpad in vpads))
-    joystick_ids = sdl3.SDL_GetGamepads(None)
-    joysticks = []
+@SDLCALL
+def event_filter(userdata, event):
+    print(event.contents.type)
+    return True
 
-    joy_ix = 0
-    while joystick_ids[joy_ix] != 0:
-        joystick_id = joystick_ids[joy_ix]
+class PyroGyroMapper:
+    def __init__(self, poll_rate=1000):
+        self.vpads = []
+        self.visible = True
+        self.running = True
+        self.poll_rate = poll_rate
+        self.systray = None
+        self.platform = platform.system()
         
-        pid = sdl3.SDL_GetJoystickProductForID(joystick_id)
-        vid = sdl3.SDL_GetJoystickVendorForID(joystick_id)
-        print(pid, vid)
-        is_virtual = (vid, pid) in ignore_list
-        joystick_name = sdl3.SDL_GetJoystickNameForID(joystick_id).decode()
-        joystick_uuid_bytes = sdl3.SDL_GetGamepadGUIDForID(joystick_id).data[0:16]
-        joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
-        if not (ignore_virtual and is_virtual):
-            joysticks.append([joystick_id, joystick_uuid, joystick_name])
-        
-        print(f"{joystick_name} ({joystick_uuid}) {'(Virtual)' if is_virtual else ''}")
-        joy_ix += 1
-    sdl3.SDL_free(joystick_ids)
-    return joysticks
+        self.do_platform_setup()
 
-VISIBLE = 1
+    def do_platform_setup(self):
+        if self.platform == "Windows":
+            print("wininit")
+            self.kernel32 = ctypes.WinDLL('kernel32')
+            self.user32 = ctypes.WinDLL('user32')
+            self.kernel32.SetConsoleTitleW("PyroGyro Console")
 
-GAMEPADS = []
+    def on_quit_callback(self, *args, **kwargs):
+        self.running = False
 
-RUN = True
+    def init_systray(self):
+        icon_path = (Path(__file__).parent / "res" / "pyrogyro.ico").as_posix()
+        if self.platform == "Windows":
+            menu_options = (
+                ('Toggle Console', None, self.toggle_vis),
+            )
+            self.systray = SysTrayIcon(
+                icon_path, 
+                "PyroGyro", 
+                menu_options, 
+                on_quit=self.on_quit_callback
+            )
+            self.systray.start()
 
-def input_poll(joy_id):
-    global RUN
-    pad = sdl3.SDL_OpenGamepad(joy_id)
-    print(f"using pad: {sdl3.SDL_GetGamepadName(pad).decode()}")
-    while RUN:
-        sdl3.SDL_UpdateGamepads()
-        if sdl3.SDL_GetGamepadButton(pad, sdl3.SDL_GAMEPAD_BUTTON_SOUTH):
-            x,y = pyautogui.position()
-            pyautogui.moveTo(x, y+1)
-        time.sleep(1.0/100.0)
+    def toggle_vis(self, *args):
+        self.visible = not self.visible
+        if self.platform == "Windows":
+            hWnd = self.kernel32.GetConsoleWindow()
+            self.user32.ShowWindow(hWnd, 1 if self.visible else 0)
 
-def appmain(*args, **kwargs):
-    global RUN
-    global GAMEPADS
-    
-    kernel32.SetConsoleTitleW("PyroGyro Console")
-    
-    def on_quit_callback(systray):
+    @classmethod
+    def init_sdl(cls):
+        sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS.encode(), "1".encode())
+        sdl3.SDL_Init(sdl3.SDL_INIT_GAMEPAD)
+
+    def get_gamepads(self, ignore_virtual=True):
+        ignore_list = set(( (vpad.get_vid(), vpad.get_pid()) for vpad in self.vpads))
+        joystick_ids = sdl3.SDL_GetGamepads(None)
+        joysticks = []
+
+        joy_ix = 0
+        while joystick_ids[joy_ix] != 0:
+            joystick_id = joystick_ids[joy_ix]
+            
+            pid = sdl3.SDL_GetJoystickProductForID(joystick_id)
+            vid = sdl3.SDL_GetJoystickVendorForID(joystick_id)
+            print(pid, vid)
+            is_virtual = (vid, pid) in ignore_list
+            joystick_name = sdl3.SDL_GetJoystickNameForID(joystick_id).decode()
+            joystick_uuid_bytes = sdl3.SDL_GetGamepadGUIDForID(joystick_id).data[0:16]
+            joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
+            if not (ignore_virtual and is_virtual):
+                joysticks.append([joystick_id, joystick_uuid, joystick_name])
+            
+            print(f"{joystick_name} ({joystick_uuid}) {'(Virtual)' if is_virtual else ''}")
+            joy_ix += 1
+        sdl3.SDL_free(joystick_ids)
+        return joysticks
+
+    def input_poll(self):
+        #pad = sdl3.SDL_OpenGamepad(joy_id)
+        while self.running:
+            event = sdl3.SDL_Event()
+            while (sdl3.SDL_PollEvent(event)):
+                #print(sdl3.SDL_EventGetType)
+                #print(event)
+                pass
+            sdl3.SDL_UpdateGamepads()
+            time.sleep(1.0/self.poll_rate)
+
+    def process_sdl_event(self, event):
         pass
     
-    def toggle_vis(systray):
-        global VISIBLE
-        print(VISIBLE)
-        VISIBLE = (VISIBLE+1)%2
-        hWnd = kernel32.GetConsoleWindow()
-        user32.ShowWindow(hWnd, VISIBLE)
-    
-    menu_options = (('Toggle Console', None, toggle_vis),)
-
-    icon_path = (Path(__file__).parent / "res" / "pyrogyro.ico").as_posix()
-    
-    with SysTrayIcon(icon_path, "PyroGyro", menu_options, on_quit=on_quit_callback) as systray:
-        init_sdl()
-
-        gamepad = vg.VX360Gamepad()
-        time.sleep(1)
-        GAMEPADS.append(gamepad)
-        pads = get_gamepads(vpads=GAMEPADS)
-        print(pads)
-        
-        if pads:
-            t1 = threading.Thread(target=input_poll, args=(pads[0][0],))
-            t1.start()
-        else:
-            t1 = None
-
-        while RUN:
+    def run(self):
+        self.init_systray()
+        sdl3.SDL_SetEventFilter(event_filter, None)
+        if self.systray:
             try:
-                command = input("> ")
-                print(command)
+                pads = self.get_gamepads()
+                print(pads)
+                if pads:
+                    self.input_poll()
             except KeyboardInterrupt:
-                RUN = False
-                break
-        
-        if t1:
-            t1.join()
+                self.running = False
+            finally:
+                self.systray.shutdown()
 
-def map_inputs():
-    pass
+def appmain(*args, **kwargs):
+    PyroGyroMapper.init_sdl()
+    PyroGyroMapper().run()
 
 if __name__ == "__main__":
     appmain(sys.argv)

@@ -1,7 +1,6 @@
 on:
-  push:
-    tags:
-    - 'v*'
+  release:
+    types: [created]
 
 name: Handle Release
 jobs:
@@ -30,10 +29,13 @@ jobs:
         run: $path = Join-Path $(poetry env info --path) "Lib\site-packages\vgamepad\win\vigem\install\x64\ViGEmBusSetup_x64.msi"; Start-Process $path /passive -Wait
       - name: Build
         run: poetry run dist
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/*.exe
+      - name: Upload Release Asset
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }} 
+          asset_path: ./dist/pyrogyro.exe
+          asset_name: pyrogyro.exe
+          asset_content_type: application/octet-stream

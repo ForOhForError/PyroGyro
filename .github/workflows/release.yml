@@ -29,10 +29,13 @@ jobs:
         run: $path = Join-Path $(poetry env info --path) "Lib\site-packages\vgamepad\win\vigem\install\x64\ViGEmBusSetup_x64.msi"; Start-Process $path /passive -Wait
       - name: Build
         run: poetry run dist
-      #- name: Upload the artifacts
-      #  uses: skx/github-action-publish-binaries@master
-      #  env:
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #  with:
-      #    releaseId: ${{ needs.create_release.outputs.id }}
-      #    args: 'dist/*.exe'
+      - name: Upload binary to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/pyrogyro.exe
+          asset_name: pyrogyro.exe
+          tag: ${{ github.ref }}
+          overwrite: true
+          body: "Windows Binary"
+            - name: upload windows artifact

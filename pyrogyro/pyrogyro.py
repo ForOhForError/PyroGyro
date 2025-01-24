@@ -19,6 +19,8 @@ import threading
 
 import pyautogui
 
+from pyrogyro.constants import icon_location
+
 SDLCALL = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event))
 
 @SDLCALL
@@ -48,13 +50,12 @@ class PyroGyroMapper:
         self.running = False
 
     def init_systray(self):
-        icon_path = (Path(__file__).parent / "res" / "pyrogyro.ico").as_posix()
         if self.platform == "Windows":
             menu_options = (
                 ('Toggle Console', None, self.toggle_vis),
             )
             self.systray = SysTrayIcon(
-                icon_path, 
+                icon_location(), 
                 "PyroGyro", 
                 menu_options, 
                 on_quit=self.on_quit_callback

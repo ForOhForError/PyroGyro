@@ -4,9 +4,14 @@ from PyInstaller.utils.hooks import collect_submodules
 from pathlib import Path
 import vgamepad
 import sdl3
-import platform
 from ctypes import CDLL
 import sys
+
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--arch-bits", choices=(32, 64, ), default=64)
+cmd_args = parser.parse_args()
 
 hiddenimports = []
 hiddenimports += collect_submodules('pyrogyro')
@@ -16,10 +21,11 @@ block_cipher = None
 
 from unittest.mock import patch
 
-if platform.architecture()[0] == "64bit":
+if cmd_args.arch_bits == 64:
     arch = "x64"
 else:
     arch = "x86"
+
 path_vigem_client = Path(vgamepad.__file__).parent.absolute() / "win" / "vigem" / "client" / arch / "ViGEmClient.dll"
 path_sdl = Path(sdl3.__file__).parent.absolute() / "bin" / f"windows-amd{arch[1:]}"
 
@@ -39,7 +45,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=['pyrogyro/runtime_hook.py'],
+    runtime_hooks=['pyrogyro/win_runtime_hook.py'],
     excludes=[''],
     noarchive=False,
     optimize=0,

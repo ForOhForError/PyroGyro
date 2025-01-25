@@ -27,17 +27,14 @@ else:
     arch = "x86"
 
 path_vigem_client = Path(vgamepad.__file__).parent.absolute() / "win" / "vigem" / "client" / arch / "ViGEmClient.dll"
-path_sdl = Path(sdl3.__file__).parent.absolute() / "bin" / f"windows-amd{arch[1:]}"
-
-print(Path(sdl3.__file__).parent.absolute())
-
+path_sdl = Path(sdl3.__file__).parent.absolute() / "bin"
 
 a = Analysis(
     ['pyrogyro/pyrogyro.py'],
     pathex=[Path(sdl3.__file__).parent.absolute()],
     binaries=[
         (path_vigem_client, '.'),
-        (path_sdl / '*.dll', '.'),
+        (path_sdl / '*.dll', './sdl3/bin'),
     ],
     datas=[
         ('res/*', 'res'),

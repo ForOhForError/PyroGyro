@@ -42,6 +42,60 @@ class Mapping:
         }
 
 
+class PyroGyroPad:
+    def __init__(self, sdl_joystick, mapping: Mapping | None = None):
+        self.logger = logging.getLogger("pyrogyropad")
+        if not mapping:
+            mapping = Mapping()
+        self.mapping = mapping
+        self.vpad = vg.VX360Gamepad()
+        self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
+
+        self.left_stick = [0.0, 0.0]
+        self.right_stick = [0.0, 0.0]
+
+    def handle_event(self, sdl_event):
+        match sdl_event.type:
+            case evt_type if sdl_event.type in (
+                sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN,
+                sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP,
+            ):
+                button_event = sdl_event.gbutton
+                enum_val = SDLButtonEnum(int(button_event.button))
+                button_name = enum_val.name
+                self.logger.info(
+                    f"{button_name} {'pressed' if button_event.down else 'released'}"
+                )
+                button_to_process = self.mapping.mapping.get(enum_val)
+                if button_to_process:
+                    if button_event.down:
+                        self.vpad.press_button(button_to_process)
+                    else:
+                        self.vpad.release_button(button_to_process)
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+                axis_event = sdl_event.gaxis
+                match axis_event.axis:
+                    case sdl3.SDL_GAMEPAD_AXIS_LEFTX:
+                        if axis_event.value != -32768.0:
+                            self.left_stick[0] = axis_event.value / 32768.0
+                    case sdl3.SDL_GAMEPAD_AXIS_LEFTY:
+                        self.left_stick[1] = axis_event.value / 32768.0
+                    case sdl3.SDL_GAMEPAD_AXIS_RIGHTX:
+                        self.right_stick[0] = axis_event.value / 32768.0
+                    case sdl3.SDL_GAMEPAD_AXIS_RIGHTY:
+                        self.right_stick[1] = axis_event.value / 32768.0
+                self.vpad.left_joystick_float(
+                    x_value_float=self.left_stick[0], y_value_float=-self.left_stick[1]
+                )
+                self.vpad.right_joystick_float(
+                    x_value_float=self.right_stick[0],
+                    y_value_float=-self.right_stick[1],
+                )
+
+    def update(self):
+        self.vpad.update()
+
+
 class PyroGyroMapper:
     def __init__(self, poll_rate=1000):
         self.logger = logging.getLogger("pyrogyro")
@@ -52,10 +106,13 @@ class PyroGyroMapper:
         self.platform = platform.system()
         self.do_platform_setup()
 
+        self.pyropads = {}
+
         self.vpads = {}
         self.open_sdl_pads = {}
-        self.sdl_joysticks = {}
         self.mappings = {}
+
+        self.sdl_joysticks = {}
 
     def on_focus_change(self, window_title, exe_path):
         print(window_title, exe_path)
@@ -92,7 +149,7 @@ class PyroGyroMapper:
 
     def populate_joystick_list(self, ignore_virtual=True):
         ignore_list = set(
-            ((vpad.get_vid(), vpad.get_pid()) for vpad in self.vpads)
+            ((pypad.vpad.get_vid(), pypad.vpad.get_pid()) for pypad in self.pyropads)
         ).union(set(BASIC_IGNORE_LIST))
         joystick_ids = sdl3.SDL_GetGamepads(None)
 
@@ -120,9 +177,7 @@ class PyroGyroMapper:
         for joy_uuid in self.sdl_joysticks:
             if joy_uuid not in self.open_sdl_pads:
                 joystick_id = self.sdl_joysticks[joy_uuid]
-                self.open_sdl_pads[joy_uuid] = sdl3.SDL_OpenGamepad(joystick_id)
-                self.vpads[joy_uuid] = vg.VX360Gamepad()
-                self.mappings[joy_uuid] = Mapping()
+                self.pyropads[joy_uuid] = PyroGyroPad(self.sdl_joysticks[joy_uuid])
 
     def input_poll(self):
         while self.running:
@@ -138,42 +193,14 @@ class PyroGyroMapper:
                             gamepad_event.which
                         ).data[0:16]
                         joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
-                        match event.type:
-                            case evt_type if event.type in (
-                                sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN,
-                                sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP,
-                            ):
-                                controller_being_mapped = self.open_sdl_pads.get(
-                                    joystick_uuid
-                                )
-                                if controller_being_mapped:
-                                    button_event = event.gbutton
-                                    enum_val = SDLButtonEnum(int(button_event.button))
-                                    button_name = enum_val.name
-                                    self.logger.info(
-                                        f"{button_name} {'pressed' if button_event.down else 'released'}"
-                                    )
-                                    if (
-                                        joystick_uuid in self.mappings
-                                        and joystick_uuid in self.vpads
-                                    ):
-                                        button_to_process = self.mappings[
-                                            joystick_uuid
-                                        ].mapping.get(enum_val)
-                                        if button_to_process:
-                                            if button_event.down:
-                                                self.vpads[joystick_uuid].press_button(
-                                                    button_to_process
-                                                )
-                                            else:
-                                                self.vpads[
-                                                    joystick_uuid
-                                                ].release_button(button_to_process)
+                        pypad = self.pyropads.get(joystick_uuid)
+                        if pypad:
+                            pypad.handle_event(event)
                     case _:
                         pass
             sdl3.SDL_UpdateGamepads()
-            for vpad in self.vpads.values():
-                vpad.update()
+            for pypad in self.pyropads.values():
+                pypad.update()
             time.sleep(1.0 / self.poll_rate)
 
     def process_sdl_event(self, event):

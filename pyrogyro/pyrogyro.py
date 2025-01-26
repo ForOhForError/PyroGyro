@@ -18,9 +18,11 @@ from infi.systray import SysTrayIcon
 
 from pyrogyro.constants import (
     DEBUG,
+    DEFAULT_CONFIG_FILE,
     LOG_FORMAT,
     LOG_FORMAT_DEBUG,
     LOG_LEVEL,
+    VID_PID_IGNORE_LIST,
     SDLButtonEnum,
     icon_location,
 )
@@ -51,8 +53,6 @@ EVENT_TYPES_IGNORE = (
     sdl3.SDL_EVENT_GAMEPAD_UPDATE_COMPLETE,
 )
 
-BASIC_IGNORE_LIST = ((1118, 654),)
-
 EVENT_TYPES_PASS_TO_PAD = (
     sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION,
     sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN,
@@ -67,7 +67,8 @@ EVENT_TYPES_PASS_TO_PAD = (
 class PyroGyroPad:
     def __init__(self, sdl_joystick, mapping: Mapping | None = None):
         if not mapping:
-            mapping = get_default_mapping()
+            with open(DEFAULT_CONFIG_FILE) as config_file:
+                mapping = Mapping.load_from_file(config_file)
         self.mapping = mapping
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
@@ -172,7 +173,7 @@ class PyroGyroMapper:
                 (pypad.vpad.get_vid(), pypad.vpad.get_pid())
                 for pypad in self.pyropads.values()
             )
-        ).union(set(BASIC_IGNORE_LIST))
+        ).union(set(VID_PID_IGNORE_LIST))
         joystick_ids = sdl3.SDL_GetGamepads(None)
 
         joysticks = {}

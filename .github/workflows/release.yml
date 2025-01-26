@@ -36,6 +36,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }} 
-          asset_path: ./dist/pyrogyro.exe
-          asset_name: pyrogyro.exe
-          asset_content_type: application/octet-stream
+          asset_path: ./dist/pyrogyro.zip
+          asset_name: pyrogyro.zip
+          asset_content_type: application/zip

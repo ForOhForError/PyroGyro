@@ -19,7 +19,9 @@ ruamel-yaml = "^0.18.10"
 
 [tool.poetry.scripts]
 pyrogyro = "pyrogyro.pyrogyro:appmain"
-dist = "pyrogyro.installer:install_win"
+dist = "pyrogyro.project_util:build_windows_dist"
+lint = "pyrogyro.project_util:lint_code"
+gen-configs = "pyrogyro.mapping:generate_default_mapping_files"
 
 [tool.poetry.group.dev.dependencies]
 pyinstaller = "^6.11.1"

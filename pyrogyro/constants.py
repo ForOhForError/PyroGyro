@@ -1,9 +1,14 @@
 import enum
+import logging
 from pathlib import Path
 
 import sdl3
 
 ROOT_DIR = Path(__file__).parent.parent
+DEBUG = True
+LOG_LEVEL = logging.DEBUG
+LOG_FORMAT = "%(message)s"
+LOG_FORMAT_DEBUG = "%(relativeCreated)6d  %(threadName)s | %(filename)s:%(lineno)d | %(name)s - %(levelname)s | %(message)s"
 
 
 def icon_location():

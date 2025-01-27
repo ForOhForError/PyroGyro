@@ -87,10 +87,15 @@ class PyroGyroPad:
         self.mapping = mapping
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
+        self.last_gyro_timestamp = None
+        if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_GYRO):
+            sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_GYRO, True)
         self.logger = logging.getLogger("PyroGyroPad")
 
         self.left_stick = [0.0, 0.0]
         self.right_stick = [0.0, 0.0]
+        
+        self.mouse_vel = [0.0, 0.0]
 
     def send_value(self, source_value, target_enum):
         match type(target_enum):
@@ -131,6 +136,11 @@ class PyroGyroPad:
                     pyautogui.keyDown(target_enum.value)
                 else:
                     pyautogui.keyUp(target_enum.value)
+            case pyrogyro.io_types.MouseTarget:
+                if to_bool(source_value):
+                    pyautogui.mouseDown(button=target_enum.value)
+                else:
+                    pyautogui.mouseUp(button=target_enum.value)
 
     def handle_event(self, sdl_event):
         match sdl_event.type:
@@ -144,7 +154,7 @@ class PyroGyroPad:
                 target_enum = self.mapping.mapping.get(enum_val)
                 if target_enum:
                     self.send_value(button_event.down, target_enum)
-            case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+            case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
                 axis_id = axis_event.axis
                 enum_val = SingleAxisSource(axis_id)
@@ -157,6 +167,20 @@ class PyroGyroPad:
                             target_enum = target_1 if enum_val == source_1 else target_2
                 if target_enum:
                     self.send_value(axis_event.value / 32768.0, target_enum)
+            case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
+                x, y, z = sdl_event.gsensor.data # pitch/yaw/roll
+                timestamp = sdl_event.gsensor.sensor_timestamp
+                if self.last_gyro_timestamp == None:
+                    self.last_gyro_timestamp = timestamp
+                delta_time = (timestamp - self.last_gyro_timestamp) / 1000000.0 # convert to seconds
+                
+                x_vel = -x * delta_time
+                y_vel = -y * delta_time
+
+                currentMouseX, currentMouseY = pyautogui.position()
+                pyautogui.moveTo(currentMouseX+int(y_vel), currentMouseY+int(x_vel))
+                
+                self.last_gyro_timestamp = timestamp
 
     def update(self):
         self.vpad.update()
@@ -206,7 +230,8 @@ class PyroGyroMapper:
         sdl3.SDL_SetHint(
             sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS.encode(), "1".encode()
         )
-        sdl3.SDL_Init(sdl3.SDL_INIT_GAMEPAD)
+        sdl_init_flags = sdl3.SDL_INIT_GAMEPAD | sdl3.SDL_INIT_HAPTIC | sdl3.SDL_INIT_SENSOR
+        sdl3.SDL_Init(sdl_init_flags)
 
     def populate_joystick_list(self, ignore_virtual=True):
         ignore_list = set(

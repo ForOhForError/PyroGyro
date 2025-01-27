@@ -16,6 +16,7 @@ import sdl3
 import vgamepad as vg
 from infi.systray import SysTrayIcon
 
+import pyrogyro.io_types
 from pyrogyro.constants import (
     DEBUG,
     DEFAULT_CONFIG_FILE,
@@ -23,10 +24,24 @@ from pyrogyro.constants import (
     LOG_FORMAT_DEBUG,
     LOG_LEVEL,
     VID_PID_IGNORE_LIST,
-    SDLButtonEnum,
     icon_location,
 )
-from pyrogyro.mapping import Mapping, get_default_mapping
+from pyrogyro.io_types import (
+    XUSB_BUTTON,
+    DoubleAxisSource,
+    DoubleAxisTarget,
+    KeyboardKeyTarget,
+    SDLButtonSource,
+    SingleAxisSource,
+    SingleAxisTarget,
+    getPossibleAxisPairs,
+    to_bool,
+    to_float,
+)
+from pyrogyro.mapping import Mapping
+
+pyautogui.FAILSAFE = False
+pyautogui.PAUSE = 0
 
 SDLCALL = ctypes.CFUNCTYPE(
     ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event)
@@ -77,40 +92,71 @@ class PyroGyroPad:
         self.left_stick = [0.0, 0.0]
         self.right_stick = [0.0, 0.0]
 
+    def send_value(self, source_value, target_enum):
+        match type(target_enum):
+            case pyrogyro.io_types.SingleAxisTarget:
+                float_val = to_float(source_value)
+                match target_enum:
+                    case SingleAxisTarget.XUSB_GAMEPAD_L2:
+                        self.vpad.left_trigger_float(float_val)
+                    case SingleAxisTarget.XUSB_GAMEPAD_R2:
+                        self.vpad.right_trigger_float(float_val)
+                    case SingleAxisTarget.XUSB_GAMEPAD_LSTICK_X:
+                        self.left_stick[0] = float_val
+                        self.vpad.left_joystick_float(
+                            self.left_stick[0], -self.left_stick[1]
+                        )
+                    case SingleAxisTarget.XUSB_GAMEPAD_LSTICK_Y:
+                        self.left_stick[1] = float_val
+                        self.vpad.left_joystick_float(
+                            self.left_stick[0], -self.left_stick[1]
+                        )
+                    case SingleAxisTarget.XUSB_GAMEPAD_RSTICK_X:
+                        self.right_stick[0] = float_val
+                        self.vpad.right_joystick_float(
+                            self.right_stick[0], -self.right_stick[1]
+                        )
+                    case SingleAxisTarget.XUSB_GAMEPAD_RSTICK_Y:
+                        self.right_stick[1] = float_val
+                        self.vpad.right_joystick_float(
+                            self.right_stick[0], -self.right_stick[1]
+                        )
+            case pyrogyro.io_types.XUSB_BUTTON:
+                if to_bool(source_value):
+                    self.vpad.press_button(target_enum.value)
+                else:
+                    self.vpad.release_button(target_enum.value)
+            case pyrogyro.io_types.KeyboardKeyTarget:
+                if to_bool(source_value):
+                    pyautogui.keyDown(target_enum.value)
+                else:
+                    pyautogui.keyUp(target_enum.value)
+
     def handle_event(self, sdl_event):
         match sdl_event.type:
             case sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN | sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
                 button_event = sdl_event.gbutton
-                enum_val = SDLButtonEnum(int(button_event.button))
+                enum_val = SDLButtonSource(int(button_event.button))
                 button_name = enum_val.name
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
-                button_to_process = self.mapping.mapping.get(enum_val)
-                if button_to_process:
-                    if button_event.down:
-                        self.vpad.press_button(button_to_process)
-                    else:
-                        self.vpad.release_button(button_to_process)
+                target_enum = self.mapping.mapping.get(enum_val)
+                if target_enum:
+                    self.send_value(button_event.down, target_enum)
             case SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
-
-                match axis_event.axis:
-                    case sdl3.SDL_GAMEPAD_AXIS_LEFTX:
-                        self.left_stick[0] = axis_event.value / 32768.0
-                    case sdl3.SDL_GAMEPAD_AXIS_LEFTY:
-                        self.left_stick[1] = axis_event.value / 32768.0
-                    case sdl3.SDL_GAMEPAD_AXIS_RIGHTX:
-                        self.right_stick[0] = axis_event.value / 32768.0
-                    case sdl3.SDL_GAMEPAD_AXIS_RIGHTY:
-                        self.right_stick[1] = axis_event.value / 32768.0
-                self.vpad.left_joystick_float(
-                    x_value_float=self.left_stick[0], y_value_float=-self.left_stick[1]
-                )
-                self.vpad.right_joystick_float(
-                    x_value_float=self.right_stick[0],
-                    y_value_float=-self.right_stick[1],
-                )
+                axis_id = axis_event.axis
+                enum_val = SingleAxisSource(axis_id)
+                target_enum = self.mapping.mapping.get(enum_val)
+                if not target_enum:
+                    for double_enum in getPossibleAxisPairs(enum_val):
+                        if double_enum in self.mapping.mapping:
+                            source_1, source_2 = double_enum.value
+                            target_1, target_2 = self.mapping.mapping[double_enum].value
+                            target_enum = target_1 if enum_val == source_1 else target_2
+                if target_enum:
+                    self.send_value(axis_event.value / 32768.0, target_enum)
 
     def update(self):
         self.vpad.update()
@@ -127,11 +173,6 @@ class PyroGyroMapper:
         self.do_platform_setup()
 
         self.pyropads = {}
-
-        self.vpads = {}
-        self.open_sdl_pads = {}
-        self.mappings = {}
-
         self.sdl_joysticks = {}
 
     def on_focus_change(self, window_title, exe_path):

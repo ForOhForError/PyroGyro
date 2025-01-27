@@ -1,48 +1,35 @@
 import collections.abc
 import sys
 import typing
-from enum import Flag
 
-import vgamepad as vg
-from pydantic import BaseModel, BeforeValidator, PlainSerializer
+from pydantic import BaseModel
 from ruamel.yaml import YAML, CommentedMap
 
-from pyrogyro.constants import SDLButtonEnum
+from pyrogyro.io_types import (
+    XUSB_BUTTON,
+    DoubleAxisSource,
+    DoubleAxisTarget,
+    MapSource,
+    MapTarget,
+    SDLButtonSource,
+    SingleAxisSource,
+    SingleAxisTarget,
+)
 
 yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
 
-EnumNameSerializer = PlainSerializer(
-    lambda e: e.name, return_type="str", when_used="always"
-)
-
-
-def enum_or_by_name(T):
-    def constructed_by_object_or_name(v: str | T) -> T:
-        if isinstance(v, T):
-            return v
-        try:
-            return T[v]
-        except KeyError:
-            raise ValueError("invalid value")
-
-    return typing.Annotated[
-        T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
-    ]
-
 
 class Mapping(BaseModel):
     name: str
-    mapping: collections.abc.Mapping[
-        enum_or_by_name(SDLButtonEnum), enum_or_by_name(vg.XUSB_BUTTON)
-    ]
+    mapping: collections.abc.Mapping[MapSource, MapTarget]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._loaded_yml_map = None
 
-    def map_button(self, button_in: SDLButtonEnum, button_out: vg.XUSB_BUTTON):
-        self.mapping[button_in] = button_out
+    def add_mapping(self, source: MapSource, button_out: MapTarget):
+        self.mapping[source] = MapTarget
 
     def save_to_file(self, file_handle=sys.stdout):
         obj_out = self.model_dump()
@@ -65,21 +52,25 @@ def get_default_mapping():
         name="Default Mapping",
         mapping=CommentedMap(
             {
-                SDLButtonEnum.NORTH: vg.XUSB_BUTTON.XUSB_GAMEPAD_Y,
-                SDLButtonEnum.SOUTH: vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
-                SDLButtonEnum.EAST: vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
-                SDLButtonEnum.WEST: vg.XUSB_BUTTON.XUSB_GAMEPAD_X,
-                SDLButtonEnum.BACK: vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK,
-                SDLButtonEnum.START: vg.XUSB_BUTTON.XUSB_GAMEPAD_START,
-                SDLButtonEnum.DPAD_UP: vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
-                SDLButtonEnum.DPAD_DOWN: vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
-                SDLButtonEnum.DPAD_LEFT: vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
-                SDLButtonEnum.DPAD_RIGHT: vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
-                SDLButtonEnum.LEFT_SHOULDER: vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER,
-                SDLButtonEnum.RIGHT_SHOULDER: vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER,
-                SDLButtonEnum.LEFT_STICK: vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB,
-                SDLButtonEnum.RIGHT_STICK: vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB,
-                SDLButtonEnum.GUIDE: vg.XUSB_BUTTON.XUSB_GAMEPAD_GUIDE,
+                SDLButtonSource.N: XUSB_BUTTON.XUSB_GAMEPAD_Y,
+                SDLButtonSource.S: XUSB_BUTTON.XUSB_GAMEPAD_A,
+                SDLButtonSource.E: XUSB_BUTTON.XUSB_GAMEPAD_B,
+                SDLButtonSource.W: XUSB_BUTTON.XUSB_GAMEPAD_X,
+                SDLButtonSource.BACK: XUSB_BUTTON.XUSB_GAMEPAD_BACK,
+                SDLButtonSource.START: XUSB_BUTTON.XUSB_GAMEPAD_START,
+                SDLButtonSource.UP: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
+                SDLButtonSource.DOWN: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
+                SDLButtonSource.LEFT: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
+                SDLButtonSource.RIGHT: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
+                SDLButtonSource.L1: XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER,
+                SDLButtonSource.R1: XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER,
+                SDLButtonSource.L3: XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB,
+                SDLButtonSource.R3: XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB,
+                SDLButtonSource.GUIDE: XUSB_BUTTON.XUSB_GAMEPAD_GUIDE,
+                SingleAxisSource.L2: SingleAxisTarget.XUSB_GAMEPAD_L2,
+                SingleAxisSource.R2: SingleAxisTarget.XUSB_GAMEPAD_R2,
+                DoubleAxisSource.LSTICK: DoubleAxisTarget.XUSB_GAMEPAD_LSTICK,
+                DoubleAxisSource.RSTICK: DoubleAxisTarget.XUSB_GAMEPAD_RSTICK,
             }
         ),
     )

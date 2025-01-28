@@ -39,6 +39,7 @@ from pyrogyro.io_types import (
     to_float,
 )
 from pyrogyro.mapping import Mapping
+from pyrogyro.monitor_focus import WindowChangeEventListener
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0
@@ -94,7 +95,7 @@ class PyroGyroPad:
 
         self.left_stick = [0.0, 0.0]
         self.right_stick = [0.0, 0.0]
-        
+
         self.mouse_vel = [0.0, 0.0]
 
     def send_value(self, source_value, target_enum):
@@ -168,18 +169,20 @@ class PyroGyroPad:
                 if target_enum:
                     self.send_value(axis_event.value / 32768.0, target_enum)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
-                x, y, z = sdl_event.gsensor.data # pitch/yaw/roll
+                x, y, z = sdl_event.gsensor.data  # pitch/yaw/roll
                 timestamp = sdl_event.gsensor.sensor_timestamp
                 if self.last_gyro_timestamp == None:
                     self.last_gyro_timestamp = timestamp
-                delta_time = (timestamp - self.last_gyro_timestamp) / 1000000.0 # convert to seconds
-                
+                delta_time = (
+                    timestamp - self.last_gyro_timestamp
+                ) / 1000000.0  # convert to seconds
+
                 x_vel = -x * delta_time
                 y_vel = -y * delta_time
 
                 currentMouseX, currentMouseY = pyautogui.position()
-                pyautogui.moveTo(currentMouseX+int(y_vel), currentMouseY+int(x_vel))
-                
+                pyautogui.moveTo(currentMouseX + int(y_vel), currentMouseY + int(x_vel))
+
                 self.last_gyro_timestamp = timestamp
 
     def update(self):
@@ -193,14 +196,15 @@ class PyroGyroMapper:
         self.running = True
         self.poll_rate = poll_rate
         self.systray = None
+        self.window_listener = None
         self.platform = platform.system()
         self.do_platform_setup()
 
         self.pyropads = {}
         self.sdl_joysticks = {}
 
-    def on_focus_change(self, window_title, exe_path):
-        print(window_title, exe_path)
+    def on_focus_change(self, exe_name, window_title):
+        self.logger.debug(f"window changed to: {window_title} ({exe_name})")
 
     def do_platform_setup(self):
         if self.platform == "Windows":
@@ -219,6 +223,13 @@ class PyroGyroMapper:
             )
             self.systray.start()
 
+    def init_window_listener(self):
+        if self.platform == "Windows":
+            self.window_listener = WindowChangeEventListener(
+                callback=self.on_focus_change
+            )
+            self.window_listener.listen_in_thread()
+
     def toggle_vis(self, *args):
         self.visible = not self.visible
         if self.platform == "Windows":
@@ -230,7 +241,9 @@ class PyroGyroMapper:
         sdl3.SDL_SetHint(
             sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS.encode(), "1".encode()
         )
-        sdl_init_flags = sdl3.SDL_INIT_GAMEPAD | sdl3.SDL_INIT_HAPTIC | sdl3.SDL_INIT_SENSOR
+        sdl_init_flags = (
+            sdl3.SDL_INIT_GAMEPAD | sdl3.SDL_INIT_HAPTIC | sdl3.SDL_INIT_SENSOR
+        )
         sdl3.SDL_Init(sdl_init_flags)
 
     def populate_joystick_list(self, ignore_virtual=True):
@@ -313,14 +326,18 @@ class PyroGyroMapper:
 
     def run(self):
         self.init_systray()
+        self.init_window_listener()
         sdl3.SDL_SetEventFilter(event_filter, None)
-        if self.systray:
-            try:
-                self.input_poll()
-            except KeyboardInterrupt:
-                self.running = False
-            finally:
+
+        try:
+            self.input_poll()
+        except KeyboardInterrupt:
+            self.running = False
+        finally:
+            if self.systray:
                 self.systray.shutdown()
+            if self.window_listener:
+                self.window_listener.stop()
 
 
 def appmain(*args, **kwargs):

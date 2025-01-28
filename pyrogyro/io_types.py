@@ -3,7 +3,7 @@ import enum
 import typing
 
 import sdl3
-from pyautogui import KEYBOARD_KEYS, PRIMARY, SECONDARY, MIDDLE
+from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
 from pydantic import BeforeValidator, PlainSerializer
 from vgamepad import XUSB_BUTTON
 
@@ -30,10 +30,12 @@ KeyboardKeyTarget = enum.Enum(
     "KeyboardKeyTarget", {key.upper(): key for key in KEYBOARD_KEYS}
 )
 
+
 class MouseTarget(enum.Enum):
     LMOUSE = PRIMARY
     RMOUSE = SECONDARY
     MMOUSE = MIDDLE
+
 
 class SDLButtonSource(enum.Enum):
     INVALID = sdl3.SDL_GAMEPAD_BUTTON_INVALID
@@ -119,11 +121,9 @@ MapDirectTarget = typing.Union[
     enum_or_by_name(SingleAxisTarget),
     enum_or_by_name(DoubleAxisTarget),
     enum_or_by_name(MouseTarget),
-    None
+    None,
 ]
-MapTarget = typing.Union[
-    MapDirectTarget
-]
+MapTarget = typing.Union[MapDirectTarget]
 
 
 def to_float(in_val):

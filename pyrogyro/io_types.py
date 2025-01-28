@@ -136,7 +136,7 @@ class MapComplexTarget(BaseModel):
 
 
 MapTarget = typing.Union[MapDirectTarget, MapComplexTarget]
-MapSource = MapDirectSource
+MapSource = typing.Union[MapDirectSource, typing.Sequence[MapDirectSource]]
 
 
 def to_float(in_val):

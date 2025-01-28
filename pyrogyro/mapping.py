@@ -2,7 +2,7 @@ import collections.abc
 import sys
 import typing
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
 from pyrogyro.io_types import (

@@ -3,12 +3,13 @@ import sys
 import typing
 
 from pydantic import BaseModel
-from ruamel.yaml import YAML, CommentedMap
+from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
 from pyrogyro.io_types import (
     XUSB_BUTTON,
     DoubleAxisSource,
     DoubleAxisTarget,
+    MapComplexTarget,
     MapSource,
     MapTarget,
     SDLButtonSource,
@@ -20,7 +21,7 @@ yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
 
 
-class Mapping(BaseModel):
+class Mapping(BaseModel, frozen=True):
     name: str
     mapping: collections.abc.Mapping[MapSource, MapTarget]
 
@@ -44,13 +45,14 @@ class Mapping(BaseModel):
         parsed_from_file = yaml.load(file_handle)
         constructed_mapping = cls.parse_obj(parsed_from_file)
         constructed_mapping._loaded_yml_map = parsed_from_file
+        print(constructed_mapping)
         return constructed_mapping
 
 
 def get_default_mapping():
     return Mapping(
         name="Default Mapping",
-        mapping=CommentedMap(
+        mapping=dict(
             {
                 SDLButtonSource.N: XUSB_BUTTON.XUSB_GAMEPAD_Y,
                 SDLButtonSource.S: XUSB_BUTTON.XUSB_GAMEPAD_A,

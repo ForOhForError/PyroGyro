@@ -331,9 +331,10 @@ class PyroGyroMapper:
 
         try:
             self.input_poll()
-        except KeyboardInterrupt:
-            self.running = False
+        except BaseException:
+            self.logger.exception("Unhandled Error; Exiting")
         finally:
+            self.running = False
             if self.systray:
                 self.systray.shutdown()
             if self.window_listener:

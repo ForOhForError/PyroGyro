@@ -1,10 +1,11 @@
 import collections.abc
 import enum
+import logging
 import typing
 
 import sdl3
 from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
-from pydantic import BeforeValidator, PlainSerializer
+from pydantic import BaseModel, BeforeValidator, PlainSerializer
 from vgamepad import XUSB_BUTTON
 
 EnumNameSerializer = PlainSerializer(
@@ -18,7 +19,7 @@ def enum_or_by_name(T):
             return v
         try:
             return T[v]
-        except KeyError:
+        except (KeyError, TypeError):
             raise ValueError("invalid value")
 
     return typing.Annotated[
@@ -110,7 +111,7 @@ def getPossibleAxisPairs(singleAxisSource):
     return matches
 
 
-MapSource = typing.Union[
+MapDirectSource = typing.Union[
     enum_or_by_name(DoubleAxisSource),
     enum_or_by_name(SingleAxisSource),
     enum_or_by_name(SDLButtonSource),
@@ -123,7 +124,19 @@ MapDirectTarget = typing.Union[
     enum_or_by_name(MouseTarget),
     None,
 ]
-MapTarget = typing.Union[MapDirectTarget]
+
+
+class MapComplexTarget(BaseModel):
+    output: MapDirectTarget
+    on: str
+
+    def __hash__(self):
+        logging.debug("hashing!")
+        return hash((self.output, self.on))
+
+
+MapTarget = typing.Union[MapDirectTarget, MapComplexTarget]
+MapSource = MapDirectSource
 
 
 def to_float(in_val):

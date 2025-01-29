@@ -22,6 +22,21 @@ class Vec2:
 
     def length(self):
         return math.sqrt(self.x**2 + self.y**2)
+    
+    def __add__(self, other):
+        if isinstance(other, Vec2):
+            return Vec2(self.x + other.x, self.y + other.y)
+        else:
+            return Vec2(self.x + other, self.y + other)
+    
+    def __iadd__(self, other):
+        if isinstance(other, Vec2):
+            self.x = self.x + other.x
+            self.y = self.y + other.y
+        else:
+            self.x = self.x + other
+            self.y = self.y + other
+        return self
 
 
 @dataclass
@@ -71,7 +86,7 @@ class Vec3:
             self.y = self.y * other
             self.z = self.z * other
 
-    def add(self, other):
+    def __iadd__(self, other):
         if isinstance(other, Vec3):
             self.x = self.x + other.x
             self.y = self.y + other.y
@@ -80,6 +95,7 @@ class Vec3:
             self.x = self.x + other
             self.y = self.y + other
             self.z = self.z + other
+        return self
 
     def length(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
@@ -150,7 +166,7 @@ def sensor_fusion_gravity(
 
     # nudge towards gravity according to current acceleration
     newGravity = accel * -1
-    gravity.add((newGravity - gravity) * nudge_value)
+    gravity += (newGravity - gravity) * nudge_value
     return gravity
 
 
@@ -188,7 +204,7 @@ def gyro_camera_player_lean(
             )
 
     pitch_vel = gyro.x * gyro_sens * delta_seconds
-    return yaw_vel, pitch_vel
+    return Vec2(yaw_vel, pitch_vel)
 
 
 def gyro_camera_player(
@@ -209,5 +225,4 @@ def gyro_camera_player(
     )
 
     pitch_vel = gyro.x * gyro_sens * delta_seconds
-
-    return yaw_vel, pitch_vel
+    return Vec2(yaw_vel, pitch_vel)

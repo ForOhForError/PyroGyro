@@ -29,7 +29,7 @@ from pyrogyro.constants import (
     icon_location,
 )
 from pyrogyro.gamepad_motion import (
-    Vec3,
+    Vec2, Vec3,
     gyro_camera_player,
     gyro_camera_player_lean,
     sensor_fusion_gravity,
@@ -113,6 +113,7 @@ class PyroGyroPad:
         self.combo_sources = {}
         self.combo_presses_active = set()
         self.gravity = Vec3()
+        self.leftover_vel = Vec2()
 
     def send_value(self, source_value, target_enum):
         match type(target_enum):
@@ -220,10 +221,14 @@ class PyroGyroPad:
                 accel_vec = Vec3(accel_x, accel_y, accel_z)
                 sensor_fusion_gravity(self.gravity, gyro_vec, accel_vec, delta_time)
                 currentMouseX, currentMouseY = pyautogui.position()
-                x_vel, y_vel = gyro_camera_player(
-                    gyro_vec, self.gravity.normalized(), delta_time, gyro_sens=3
+                camera_vel = gyro_camera_player(
+                    gyro_vec, self.gravity.normalized(), delta_time, gyro_sens=1
                 )
-                pyautogui.moveTo(currentMouseX - int(x_vel), currentMouseY - int(y_vel))
+                
+                camera_vel += self.leftover_vel
+                vel_x, vel_y = int(camera_vel.x), int(camera_vel.y)
+                self.leftover_vel.x, self.leftover_vel.y = camera_vel.x - vel_x, camera_vel.y - vel_y
+                pyautogui.moveTo(currentMouseX - vel_x, currentMouseY - vel_y)
 
     def update(self):
         self.vpad.update()

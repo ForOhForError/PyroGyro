@@ -11,6 +11,8 @@ DEFAULT_CONFIG_FILE = "configs/xbox.yml"
 
 VID_PID_IGNORE_LIST = ((1118, 654),)  # Ignore ViGEmBus-mapped virtual devices
 
+SHOW_STARTUP_VERSION_MODULES = ("pyrogyro", "pysdl3")
+
 
 def icon_location():
     return (ROOT_DIR / "res" / "pyrogyro.ico").as_posix()

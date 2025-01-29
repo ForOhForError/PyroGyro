@@ -21,16 +21,31 @@ yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
 
 
-class Mapping(BaseModel, frozen=True):
+class Mapping(BaseModel):
     name: str
     mapping: collections.abc.Mapping[MapSource, MapTarget]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._loaded_yml_map = None
+        self._combo_map = {}
 
     def add_mapping(self, source: MapSource, button_out: MapTarget):
         self.mapping[source] = MapTarget
+        self._update_combo_mappings()
+
+    def _update_combo_mappings(self):
+        combo_map = {}
+        for key in self.mapping.keys():
+            if isinstance(key, typing.Sequence):
+                combo_map[key] = self.mapping[key]
+        self._combo_map = combo_map
+
+    def _valid_for_combo(self, source: MapSource) -> bool:
+        for combo_key in self._combo_map:
+            if source in combo_key:
+                return True
+        return False
 
     def save_to_file(self, file_handle=sys.stdout):
         obj_out = self.model_dump()
@@ -45,7 +60,6 @@ class Mapping(BaseModel, frozen=True):
         parsed_from_file = yaml.load(file_handle)
         constructed_mapping = cls.parse_obj(parsed_from_file)
         constructed_mapping._loaded_yml_map = parsed_from_file
-        print(constructed_mapping)
         return constructed_mapping
 
 

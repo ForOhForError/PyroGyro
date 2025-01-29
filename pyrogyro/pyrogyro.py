@@ -3,6 +3,7 @@
 # https://wiki.libsdl.org/SDL3/APIByCategory
 
 import ctypes
+import importlib.metadata
 import logging
 import platform
 import sys
@@ -23,8 +24,15 @@ from pyrogyro.constants import (
     LOG_FORMAT,
     LOG_FORMAT_DEBUG,
     LOG_LEVEL,
+    SHOW_STARTUP_VERSION_MODULES,
     VID_PID_IGNORE_LIST,
     icon_location,
+)
+from pyrogyro.gamepad_motion import (
+    Vec3,
+    gyro_camera_player,
+    gyro_camera_player_lean,
+    sensor_fusion_gravity,
 )
 from pyrogyro.io_types import (
     XUSB_BUTTON,
@@ -82,6 +90,7 @@ EVENT_TYPES_PASS_TO_PAD = (
 
 class PyroGyroPad:
     def __init__(self, sdl_joystick, mapping: Mapping | None = None):
+        self.logger = logging.getLogger("PyroGyroPad")
         if not mapping:
             with open(DEFAULT_CONFIG_FILE) as config_file:
                 mapping = Mapping.load_from_file(config_file)
@@ -89,14 +98,21 @@ class PyroGyroPad:
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
         self.last_gyro_timestamp = None
+        self.last_accel_timestamp = None
         if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_GYRO):
+            self.logger.info("Gyro Sensor Detected")
             sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_GYRO, True)
-        self.logger = logging.getLogger("PyroGyroPad")
+        if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL):
+            self.logger.info("Accel Sensor Detected")
+            sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL, True)
 
         self.left_stick = [0.0, 0.0]
         self.right_stick = [0.0, 0.0]
 
         self.mouse_vel = [0.0, 0.0]
+        self.combo_sources = {}
+        self.combo_presses_active = set()
+        self.gravity = Vec3()
 
     def send_value(self, source_value, target_enum):
         match type(target_enum):
@@ -144,15 +160,25 @@ class PyroGyroPad:
                     pyautogui.mouseUp(button=target_enum.value)
 
     def handle_event(self, sdl_event):
+        gyro_x, gyro_y, gyro_z = 0.0, 0.0, 0.0
+        accel_x, accel_y, accel_z = 0.0, 0.0, 0.0
+        delta_time = 0
         match sdl_event.type:
             case sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN | sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
                 button_event = sdl_event.gbutton
+                timestamp = int(button_event.timestamp)
                 enum_val = SDLButtonSource(int(button_event.button))
                 button_name = enum_val.name
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
                 target_enum = self.mapping.mapping.get(enum_val)
+                if self.mapping._valid_for_combo(enum_val):
+                    if button_event.down:
+                        self.combo_sources[enum_val] = timestamp
+                    else:
+                        if enum_val in self.combo_sources:
+                            self.combo_sources.pop(enum_val)
                 if target_enum:
                     self.send_value(button_event.down, target_enum)
             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
@@ -169,21 +195,35 @@ class PyroGyroPad:
                 if target_enum:
                     self.send_value(axis_event.value / 32768.0, target_enum)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
-                x, y, z = sdl_event.gsensor.data  # pitch/yaw/roll
-                timestamp = sdl_event.gsensor.sensor_timestamp
-                if self.last_gyro_timestamp == None:
+                sensor_event = sdl_event.gsensor
+                sensor_type = sensor_event.sensor
+                if sensor_type == sdl3.SDL_SENSOR_GYRO:
+                    gyro_x, gyro_y, gyro_z = sensor_event.data  # pitch/yaw/roll
+                    timestamp = sensor_event.sensor_timestamp
+                    if self.last_gyro_timestamp == None:
+                        self.last_gyro_timestamp = timestamp
+                    delta_time = (
+                        timestamp - self.last_gyro_timestamp
+                    ) / 1000000.0  # convert to seconds
                     self.last_gyro_timestamp = timestamp
-                delta_time = (
-                    timestamp - self.last_gyro_timestamp
-                ) / 1000000.0  # convert to seconds
-
-                x_vel = -x * delta_time
-                y_vel = -y * delta_time
-
+                if sensor_type == sdl3.SDL_SENSOR_ACCEL:
+                    accel_x, accel_y, accel_z = sensor_event.data  # pitch/yaw/roll
+                    timestamp = sensor_event.sensor_timestamp
+                    if self.last_accel_timestamp == None:
+                        self.last_accel_timestamp = timestamp
+                    delta_time = (
+                        timestamp - self.last_accel_timestamp
+                    ) / 1000000.0  # convert to seconds
+                    self.last_accel_timestamp = timestamp
+                ##
+                gyro_vec = Vec3(gyro_x, gyro_y, gyro_z)
+                accel_vec = Vec3(accel_x, accel_y, accel_z)
+                sensor_fusion_gravity(self.gravity, gyro_vec, accel_vec, delta_time)
                 currentMouseX, currentMouseY = pyautogui.position()
-                pyautogui.moveTo(currentMouseX + int(y_vel), currentMouseY + int(x_vel))
-
-                self.last_gyro_timestamp = timestamp
+                x_vel, y_vel = gyro_camera_player(
+                    gyro_vec, self.gravity.normalized(), delta_time, gyro_sens=3
+                )
+                pyautogui.moveTo(currentMouseX - int(x_vel), currentMouseY - int(y_vel))
 
     def update(self):
         self.vpad.update()
@@ -217,6 +257,7 @@ class PyroGyroMapper:
 
     def init_systray(self):
         if self.platform == "Windows":
+            self.logger.info("Starting Tray Icon")
             menu_options = (("Toggle Console", None, self.toggle_vis),)
             self.systray = SysTrayIcon(
                 icon_location(), "PyroGyro", menu_options, on_quit=self.on_quit_callback
@@ -225,6 +266,7 @@ class PyroGyroMapper:
 
     def init_window_listener(self):
         if self.platform == "Windows":
+            self.logger.info("Starting Window Listener")
             self.window_listener = WindowChangeEventListener(
                 callback=self.on_focus_change
             )
@@ -247,6 +289,7 @@ class PyroGyroMapper:
         sdl3.SDL_Init(sdl_init_flags)
 
     def populate_joystick_list(self, ignore_virtual=True):
+        self.logger.info("== Gamepads currently connected: ==")
         ignore_list = set(
             (
                 (pypad.vpad.get_vid(), pypad.vpad.get_pid())
@@ -278,6 +321,7 @@ class PyroGyroMapper:
                 f"Gamepad {joy_ix}: {joystick_name} ({joystick_uuid}) {'(Virtual)' if is_virtual else ''}"
             )
             joy_ix += 1
+        self.logger.info("==")
         sdl3.SDL_free(joystick_ids)
         self.sdl_joysticks = joysticks
 
@@ -285,16 +329,19 @@ class PyroGyroMapper:
         for joy_uuid in self.sdl_joysticks:
             if joy_uuid not in self.pyropads:
                 joystick_id = self.sdl_joysticks[joy_uuid]
+                self.logger.info(f"Registering pad for new device {joy_uuid}")
                 self.pyropads[joy_uuid] = PyroGyroPad(self.sdl_joysticks[joy_uuid])
         to_remove = []
         for joy_uuid in self.pyropads:
             if joy_uuid not in self.sdl_joysticks:
+                self.logger.info(f"Removing pad for removed device {joy_uuid}")
                 to_remove.append(joy_uuid)
         for joy_uuid in to_remove:
             self.pyropads.pop(joy_uuid)
 
     def input_poll(self):
         while self.running:
+            populate_pads = False
             event = sdl3.SDL_Event()
             while sdl3.SDL_PollEvent(event):
                 match event.type:
@@ -308,14 +355,16 @@ class PyroGyroMapper:
                         if pypad:
                             pypad.handle_event(event)
                     case sdl3.SDL_EVENT_GAMEPAD_ADDED | sdl3.SDL_EVENT_GAMEPAD_REMOVED:
-                        self.populate_joystick_list()
-                        self.create_device_map()
+                        populate_pads = True
                     case evt_type if evt_type in EVENT_TYPES_IGNORE:
                         pass
                     case _:
                         self.logger.debug(
                             f"fallthrough, ignoring gamepad event of type {hex(event.type)}"
                         )
+            if populate_pads:
+                self.populate_joystick_list()
+                self.create_device_map()
             sdl3.SDL_UpdateGamepads()
             for pypad in self.pyropads.values():
                 pypad.update()
@@ -325,12 +374,19 @@ class PyroGyroMapper:
         pass
 
     def run(self):
+        self.logger.info("PyroGyro Starting")
+        for module_name in SHOW_STARTUP_VERSION_MODULES:
+            self.logger.info(
+                f"{module_name} version {importlib.metadata.version(module_name)}"
+            )
         self.init_systray()
         self.init_window_listener()
         sdl3.SDL_SetEventFilter(event_filter, None)
 
         try:
             self.input_poll()
+        except KeyboardInterrupt:
+            pass
         except BaseException:
             self.logger.exception("Unhandled Error; Exiting")
         finally:

@@ -131,7 +131,6 @@ class MapComplexTarget(BaseModel):
     on: str
 
     def __hash__(self):
-        logging.debug("hashing!")
         return hash((self.output, self.on))
 
 

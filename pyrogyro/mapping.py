@@ -28,9 +28,34 @@ class GyroMapping(BaseModel):
     output: typing.Optional[enum_or_by_name(DoubleAxisTarget)] = None
 
 
+class AutoloadConfig(BaseModel):
+    match_exe_name: str = ".*"
+    match_window_name: str = ".*"
+    match_controller_name: str = ".*"
+
+    @classmethod
+    def get_match_all(cls):
+        return cls(
+            match_exe_name=".*", match_window_name=".*", match_controller_name=".*"
+        )
+
+    def count_specificity(self):
+        return sum(
+            (
+                1 if val != "*" else 0
+                for val in (
+                    self.match_exe_name,
+                    self.match_window_name,
+                    self.match_controller_name,
+                )
+            )
+        )
+
+
 class Mapping(BaseModel):
-    name: str
-    mapping: collections.abc.Mapping[MapSource, MapTarget]
+    name: str = "Empty Mapping"
+    autoload: typing.Optional[AutoloadConfig] = None
+    mapping: collections.abc.Mapping[MapSource, MapTarget] = CommentedMap()
     gyro: GyroMapping = GyroMapping()
 
     def __init__(self, *args, **kwargs):
@@ -56,7 +81,7 @@ class Mapping(BaseModel):
         return False
 
     def save_to_file(self, file_handle=sys.stdout):
-        obj_out = self.model_dump()
+        obj_out = self.model_dump(exclude_none=True, exclude_unset=True)
         if self._loaded_yml_map:
             commented_out = CommentedMap(obj_out)
             commented_out = commented_out.copy_attributes(self._loaded_yml_map)
@@ -73,7 +98,8 @@ class Mapping(BaseModel):
 
 def get_default_mapping():
     return Mapping(
-        name="Default Mapping",
+        name="Default Xbox Controller",
+        autoload=AutoloadConfig.get_match_all(),
         mapping=dict(
             {
                 SDLButtonSource.N: XUSB_BUTTON.XUSB_GAMEPAD_Y,
@@ -102,5 +128,5 @@ def get_default_mapping():
 
 def generate_default_mapping_files():
     xbox_config = get_default_mapping()
-    with open("configs/xbox.yml", "w") as xbox_config_file:
+    with open("configs/default_xbox.yml", "w") as xbox_config_file:
         xbox_config.save_to_file(xbox_config_file)

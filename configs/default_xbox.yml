@@ -1,4 +1,8 @@
-name: Default Mapping
+name: Default Xbox Controller
+autoload:
+  match_exe_name: .*
+  match_window_name: .*
+  match_controller_name: .*
 mapping:
   N: XUSB_GAMEPAD_Y
   S: XUSB_GAMEPAD_A
@@ -19,8 +23,3 @@ mapping:
   R2: XUSB_GAMEPAD_R2
   LSTICK: XUSB_GAMEPAD_LSTICK
   RSTICK: XUSB_GAMEPAD_RSTICK
-gyro:
-  mode:
-    gyro_mode: OFF
-    gyro_sens: 1.0
-  output:

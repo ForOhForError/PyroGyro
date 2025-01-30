@@ -72,6 +72,8 @@ class WindowChangeEventListener(object):
     def __init__(self, callback=None):
         self.running = False
         self.hook = 0
+        self.focus_exe_name = "pyrogyro.exe"
+        self.focus_window_title = "PyroGyro Console"
         if callback:
             self.callback = callback
         else:
@@ -92,7 +94,8 @@ class WindowChangeEventListener(object):
             pid = ctypes.wintypes.LPDWORD(ctypes.c_ulong(0))
             GetWindowThreadProcessId(hwnd, pid)
             proc = psutil.Process(pid.contents.value)
-            self.callback(proc.name(), namebuff.value)
+            self.focus_exe_name, self.focus_window_title = proc.name(), namebuff.value
+            self.callback(self.focus_exe_name, self.focus_window_title)
 
         WinEventProc = WinEventProcType(win_callback)
         hook = user32.SetWinEventHook(
@@ -131,3 +134,6 @@ class WindowChangeEventListener(object):
 
     def stop(self):
         self.running = False
+
+    def get_current_focus(self):
+        return self.focus_exe_name, self.focus_window_title

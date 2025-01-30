@@ -5,7 +5,9 @@
 import ctypes
 import importlib.metadata
 import logging
+import os.path
 import platform
+import re
 import sys
 import threading
 import time
@@ -20,7 +22,6 @@ from infi.systray import SysTrayIcon
 import pyrogyro.io_types
 from pyrogyro.constants import (
     DEBUG,
-    DEFAULT_CONFIG_FILE,
     LOG_FORMAT,
     LOG_FORMAT_DEBUG,
     LOG_LEVEL,
@@ -50,7 +51,7 @@ from pyrogyro.io_types import (
     to_bool,
     to_float,
 )
-from pyrogyro.mapping import Mapping
+from pyrogyro.mapping import AutoloadConfig, Mapping
 from pyrogyro.monitor_focus import WindowChangeEventListener
 
 pyautogui.FAILSAFE = False
@@ -96,8 +97,7 @@ class PyroGyroPad:
     def __init__(self, sdl_joystick, mapping: Mapping | None = None):
         self.logger = logging.getLogger("PyroGyroPad")
         if not mapping:
-            with open(DEFAULT_CONFIG_FILE) as config_file:
-                mapping = Mapping.load_from_file(config_file)
+            mapping = Mapping()
         self.mapping = mapping
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
@@ -119,6 +119,44 @@ class PyroGyroPad:
         self.gyro_vec = Vec3()
         self.accel_vec = Vec3()
         self.leftover_vel = Vec2()
+
+    def evaluate_autoload_mappings(self, mappings, exe_name, window_title):
+        potential_mappings = []
+        controller_name = sdl3.SDL_GetGamepadName(self.sdl_pad).decode()
+        new_mapping = None
+        for mapping in mappings:
+            if all(
+                (
+                    re.fullmatch(
+                        mapping.autoload.match_controller_name, controller_name
+                    ),
+                    re.fullmatch(mapping.autoload.match_window_name, window_title),
+                    re.fullmatch(mapping.autoload.match_exe_name, exe_name),
+                    mapping != self.mapping,
+                )
+            ):
+                potential_mappings.append(mapping)
+        if potential_mappings:
+            if len(potential_mappings) == 1:
+                new_mapping = potential_mappings[0]
+            else:
+                potential_mappings.sort(key=AutoloadConfig.count_specificity)
+                best_match = potential_mappings[-1]
+                final_value = best_match.autoload.count_specificity()
+                remaining_mappings = len(
+                    [
+                        mapping
+                        for mapping in potential_mappings
+                        if mapping.count_specificity() == final_value
+                    ]
+                )
+                if remaining_mappings == 1:
+                    new_mapping = best_match
+        if new_mapping:
+            self.logger.info(
+                f"Applying mapping '{new_mapping.name}' to PyroGyro pad for controller '{controller_name}'"
+            )
+            self.mapping = new_mapping
 
     def send_value(self, source_value, target_enum):
         match type(target_enum):
@@ -289,10 +327,47 @@ class PyroGyroMapper:
         self.do_platform_setup()
 
         self.pyropads = {}
+        self.autoload_configs = {}
         self.sdl_joysticks = {}
+
+    def refresh_autoload_mappings(self):
+        config_path_list = set(Path("configs").rglob("*.yml"))
+        for config_path in config_path_list:
+            mod_time = os.path.getmtime(config_path)
+            if (
+                config_path not in self.autoload_configs
+                or self.autoload_configs[config_path][1] != mod_time
+            ):
+                with open(config_path) as config_handle:
+                    mapping: Mapping = Mapping.load_from_file(file_handle=config_path)
+                    if mapping.autoload != None:
+                        self.logger.debug(
+                            f"Pushed autoload mapping for file {config_path}"
+                        )
+                        self.autoload_configs[config_path] = (
+                            mapping,
+                            os.path.getmtime(config_path),
+                        )
+        to_remove = []
+        for config_path in self.autoload_configs:
+            if config_path not in config_path_list:
+                to_remove.append(config_path)
+                self.logger.debug(f"Removed autoload mapping for file {config_path}")
+        for config_path in to_remove:
+            self.autoload_configs.pop(config_path)
+
+    def autoload_refresh_and_evaluate(self, exe_name, window_title):
+        self.refresh_autoload_mappings()
+        configs_to_check = [
+            mapping_tuple[0] for mapping_tuple in self.autoload_configs.values()
+        ]
+        self.logger.debug(f"checking {len(configs_to_check)} config(s)")
+        for pyropad in self.pyropads.values():
+            pyropad.evaluate_autoload_mappings(configs_to_check, exe_name, window_title)
 
     def on_focus_change(self, exe_name, window_title):
         self.logger.debug(f"window changed to: {window_title} ({exe_name})")
+        self.autoload_refresh_and_evaluate(exe_name, window_title)
 
     def do_platform_setup(self):
         if self.platform == "Windows":
@@ -413,6 +488,11 @@ class PyroGyroMapper:
             if populate_pads:
                 self.populate_joystick_list()
                 self.create_device_map()
+                if self.window_listener:
+                    exe_name, window_title = self.window_listener.get_current_focus()
+                else:
+                    exe_name, window_title = "pyrogyro.exe", "PyroGyro Console"
+                self.autoload_refresh_and_evaluate(exe_name, window_title)
             sdl3.SDL_UpdateGamepads()
             for pypad in self.pyropads.values():
                 pypad.update()
@@ -430,6 +510,8 @@ class PyroGyroMapper:
         self.init_systray()
         self.init_window_listener()
         sdl3.SDL_SetEventFilter(event_filter, None)
+
+        self.refresh_autoload_mappings()
 
         try:
             self.input_poll()

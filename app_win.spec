@@ -72,5 +72,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     clean=True,
-    icon='res/pyrogyro.ico',
+    icon='res/pyrogyro2.ico',
     )

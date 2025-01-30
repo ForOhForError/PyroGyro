@@ -29,9 +29,13 @@ from pyrogyro.constants import (
     icon_location,
 )
 from pyrogyro.gamepad_motion import (
-    Vec2, Vec3,
-    gyro_camera_player,
+    Vec2,
+    Vec3,
+    gyro_camera_local,
+    gyro_camera_local_ow,
     gyro_camera_player_lean,
+    gyro_camera_player_turn,
+    gyro_camera_world,
     sensor_fusion_gravity,
 )
 from pyrogyro.io_types import (
@@ -109,10 +113,11 @@ class PyroGyroPad:
         self.left_stick = [0.0, 0.0]
         self.right_stick = [0.0, 0.0]
 
-        self.mouse_vel = [0.0, 0.0]
         self.combo_sources = {}
         self.combo_presses_active = set()
         self.gravity = Vec3()
+        self.gyro_vec = Vec3()
+        self.accel_vec = Vec3()
         self.leftover_vel = Vec2()
 
     def send_value(self, source_value, target_enum):
@@ -154,11 +159,37 @@ class PyroGyroPad:
                     pyautogui.keyDown(target_enum.value)
                 else:
                     pyautogui.keyUp(target_enum.value)
-            case pyrogyro.io_types.MouseTarget:
+            case pyrogyro.io_types.MouseButtonTarget:
                 if to_bool(source_value):
                     pyautogui.mouseDown(button=target_enum.value)
                 else:
                     pyautogui.mouseUp(button=target_enum.value)
+
+    def mouse_calib_mult(
+        self,
+        real_world_sens: float = 1.0,
+        os_mouse_speed: float = 1.0,
+        in_game_sens: float = 1.0,
+    ):
+        if os_mouse_speed == 0:
+            return 0
+        if in_game_sens == 0:
+            return 0
+        return real_world_sens / os_mouse_speed / in_game_sens
+
+    def move_mouse(
+        self,
+        x: float,
+        y: float,
+        calib_mult: float = 1.0,
+        extra_x: float = 0.0,
+        extra_y: float = 0.0,
+    ):
+        vel_x = x + extra_x
+        vel_y = y + extra_y
+        current_x, current_y = pyautogui.position()
+        pyautogui.moveTo(current_x - int(vel_x), current_y - int(vel_y))
+        return vel_x % 1, vel_y % 1
 
     def handle_event(self, sdl_event):
         gyro_x, gyro_y, gyro_z = 0.0, 0.0, 0.0
@@ -217,18 +248,30 @@ class PyroGyroPad:
                     ) / 1000000.0  # convert to seconds
                     self.last_accel_timestamp = timestamp
                 ##
-                gyro_vec = Vec3(gyro_x, gyro_y, gyro_z)
-                accel_vec = Vec3(accel_x, accel_y, accel_z)
-                sensor_fusion_gravity(self.gravity, gyro_vec, accel_vec, delta_time)
-                currentMouseX, currentMouseY = pyautogui.position()
-                camera_vel = gyro_camera_player(
-                    gyro_vec, self.gravity.normalized(), delta_time, gyro_sens=1
+
+                self.gyro_vec.x, self.gyro_vec.y, self.gyro_vec.z = (
+                    gyro_x,
+                    gyro_y,
+                    gyro_z,
                 )
-                
-                camera_vel += self.leftover_vel
-                vel_x, vel_y = int(camera_vel.x), int(camera_vel.y)
-                self.leftover_vel.x, self.leftover_vel.y = camera_vel.x - vel_x, camera_vel.y - vel_y
-                pyautogui.moveTo(currentMouseX - vel_x, currentMouseY - vel_y)
+                self.accel_vec.x, self.accel_vec.y, self.accel_vec.z = (
+                    accel_x,
+                    accel_y,
+                    accel_z,
+                )
+                sensor_fusion_gravity(
+                    self.gravity, self.gyro_vec, self.accel_vec, delta_time
+                )
+                camera_vel = self.mapping.gyro.mode.gyro_camera(
+                    self.gyro_vec, self.gravity.normalized(), delta_time
+                )
+                self.leftover_vel.x, self.leftover_vel.y = self.move_mouse(
+                    camera_vel.x,
+                    camera_vel.y,
+                    calib_mult=self.mouse_calib_mult(),
+                    extra_x=self.leftover_vel.x,
+                    extra_y=self.leftover_vel.y,
+                )
 
     def update(self):
         self.vpad.update()

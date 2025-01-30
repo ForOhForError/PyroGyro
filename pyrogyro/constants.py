@@ -15,4 +15,4 @@ SHOW_STARTUP_VERSION_MODULES = ("pyrogyro", "pysdl3")
 
 
 def icon_location():
-    return (ROOT_DIR / "res" / "pyrogyro.ico").as_posix()
+    return (ROOT_DIR / "res" / "pyrogyro2.ico").as_posix()

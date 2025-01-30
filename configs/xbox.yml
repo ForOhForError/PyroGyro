@@ -19,3 +19,8 @@ mapping:
   R2: XUSB_GAMEPAD_R2
   LSTICK: XUSB_GAMEPAD_LSTICK
   RSTICK: XUSB_GAMEPAD_RSTICK
+gyro:
+  mode:
+    gyro_mode: OFF
+    gyro_sens: 1.0
+  output:

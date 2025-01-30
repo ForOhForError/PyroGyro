@@ -33,6 +33,10 @@ KeyboardKeyTarget = enum.Enum(
 
 
 class MouseTarget(enum.Enum):
+    MOUSE = "MOUSE"
+
+
+class MouseButtonTarget(enum.Enum):
     LMOUSE = PRIMARY
     RMOUSE = SECONDARY
     MMOUSE = MIDDLE
@@ -121,6 +125,7 @@ MapDirectTarget = typing.Union[
     enum_or_by_name(XUSB_BUTTON),
     enum_or_by_name(SingleAxisTarget),
     enum_or_by_name(DoubleAxisTarget),
+    enum_or_by_name(MouseButtonTarget),
     enum_or_by_name(MouseTarget),
     None,
 ]

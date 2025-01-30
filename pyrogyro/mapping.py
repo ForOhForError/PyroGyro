@@ -5,6 +5,7 @@ import typing
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
+from pyrogyro.gamepad_motion import GyroSource
 from pyrogyro.io_types import (
     XUSB_BUTTON,
     DoubleAxisSource,
@@ -15,15 +16,22 @@ from pyrogyro.io_types import (
     SDLButtonSource,
     SingleAxisSource,
     SingleAxisTarget,
+    enum_or_by_name,
 )
 
 yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
 
 
+class GyroMapping(BaseModel):
+    mode: GyroSource = GyroSource()
+    output: typing.Optional[enum_or_by_name(DoubleAxisTarget)] = None
+
+
 class Mapping(BaseModel):
     name: str
     mapping: collections.abc.Mapping[MapSource, MapTarget]
+    gyro: GyroMapping = GyroMapping()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

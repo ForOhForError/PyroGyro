@@ -9,7 +9,7 @@ LOG_FORMAT_DEBUG = "%(relativeCreated)6d  %(threadName)s | %(filename)s:%(lineno
 
 VID_PID_IGNORE_LIST = ((1118, 654),)  # Ignore ViGEmBus-mapped virtual devices
 
-SHOW_STARTUP_VERSION_MODULES = ("pyrogyro", "pysdl3")
+SHOW_STARTUP_VERSION_MODULES = []  # ("pyrogyro", "pysdl3")
 
 
 def icon_location():

@@ -5,7 +5,7 @@ import typing
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
-from pyrogyro.gamepad_motion import GyroSource
+from pyrogyro.gamepad_motion import GyroMode, GyroSource
 from pyrogyro.io_types import (
     XUSB_BUTTON,
     DoubleAxisSource,

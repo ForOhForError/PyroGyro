@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyrogyro"
-version = "0.0.1"
+version = "0.0.2"
 description = "Yet Another (Gyro) Gamepad Mapper, written in Python for hackability"
 authors = ["ForOhForError"]
 packages = [{include = "pyrogyro"}]

@@ -2,7 +2,10 @@
 # https://github.com/Aermoss/PySDL3/
 # https://wiki.libsdl.org/SDL3/APIByCategory
 
+import colorsys
 import ctypes
+import dataclasses
+import enum
 import importlib.metadata
 import logging
 import os.path
@@ -11,6 +14,7 @@ import re
 import sys
 import threading
 import time
+import typing
 import uuid
 from pathlib import Path
 
@@ -32,6 +36,7 @@ from pyrogyro.constants import (
 from pyrogyro.gamepad_motion import (
     Vec2,
     Vec3,
+    clamp,
     gyro_camera_local,
     gyro_camera_local_ow,
     gyro_camera_player_lean,
@@ -92,6 +97,73 @@ EVENT_TYPES_PASS_TO_PAD = (
     sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE,
 )
 
+ROYGBIV = (
+    Vec3(x=0, y=1, z=1),
+    Vec3(x=1, y=1, z=1),
+)
+
+
+class ColorSpace(enum.Enum):
+    RGB = "RGB"
+    HSV = "HSV"
+
+    def to_rgb(self, in_color: Vec3):
+        match self.value:
+            case self.HSV.value:
+                rgb = colorsys.hsv_to_rgb(in_color.x, in_color.y, in_color.z)
+                return Vec3(x=rgb[0], y=rgb[1], z=rgb[2])
+            case self.RGB.value:
+                return in_color
+        return in_color
+
+
+@dataclasses.dataclass
+class LerpableLED:
+    current_color: Vec3 = Vec3
+    color_sequence: typing.Sequence[Vec3] = dataclasses.field(default_factory=list)
+    index_start: int = 0
+    index_end: int = 0
+    start_ts: typing.Optional[int] = None
+    duration_per_color: float = 1
+    color_space: ColorSpace = ColorSpace.RGB
+
+    def set_sequence(
+        self,
+        color_sequence: typing.Sequence[Vec3],
+        color_space=ColorSpace.RGB,
+        duration_per_color=1,
+    ):
+        self.color_sequence = color_sequence
+        self.color_space = color_space
+        self.index_start = 0
+        self.duration_per_color = duration_per_color
+        if len(self.color_sequence) > 1:
+            self.index_end = 1
+        else:
+            self.index_end = 0
+        return self
+
+    def update(self, timestamp, units_in_second=1000.0):
+        if self.start_ts == None:
+            self.start_ts = timestamp
+        time_delta = (timestamp - self.start_ts) / units_in_second
+        if self.duration_per_color == 0:
+            delta = 0
+        else:
+            delta = time_delta / self.duration_per_color
+        start, end = (
+            self.color_sequence[self.index_start],
+            self.color_sequence[self.index_end],
+        )
+        self.current_color.set_lerp(self.current_color, start, end, delta)
+        if delta >= 1.0:
+            self.index_start = (self.index_start + 1) % len(self.color_sequence)
+            self.index_end = (self.index_end + 1) % len(self.color_sequence)
+            self.start_ts = timestamp
+
+    def get_rgb_color(self):
+        return self.color_space.to_rgb(self.current_color)
+
 
 class PyroGyroPad:
     def __init__(self, sdl_joystick, mapping: Mapping | None = None):
@@ -101,6 +173,10 @@ class PyroGyroPad:
         self.mapping = mapping
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
+        self.vpad.register_notification(callback_function=self.virtual_pad_callback)
+        self.led = LerpableLED().set_sequence(
+            ROYGBIV, color_space=ColorSpace.HSV, duration_per_color=5
+        )
         self.last_gyro_timestamp = None
         self.last_accel_timestamp = None
         if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_GYRO):
@@ -120,9 +196,40 @@ class PyroGyroPad:
         self.accel_vec = Vec3()
         self.leftover_vel = Vec2()
 
+    def virtual_pad_callback(
+        self, client, target, large_motor, small_motor, led_number, user_data
+    ):
+        """
+        Callback function triggered at each received state change
+
+        :param client: vigem bus ID
+        :param target: vigem device ID
+        :param large_motor: integer in [0, 255] representing the state of the large motor
+        :param small_motor: integer in [0, 255] representing the state of the small motor
+        :param led_number: integer in [0, 255] representing the state of the LED ring
+        :param user_data: placeholder, do not use
+        """
+        low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
+        high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
+        # we get updates as rumble changes changes, so just set duration to a second
+        # and have later updates overwrite that
+        sdl3.SDL_RumbleGamepad(
+            self.sdl_pad, low_frequency_rumble, high_frequency_rumble, 1000
+        )
+
+    @property
+    def real_controller_name(self):
+        return sdl3.SDL_GetGamepadName(self.sdl_pad).decode()
+
+    @property
+    def real_controller_uuid(self):
+        joystick_uuid_bytes = sdl3.SDL_GetGamepadGUID(self.sdl_pad).data[0:16]
+        joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
+        return joystick_uuid
+
     def evaluate_autoload_mappings(self, mappings, exe_name, window_title):
         potential_mappings = []
-        controller_name = sdl3.SDL_GetGamepadName(self.sdl_pad).decode()
+        controller_name = self.real_controller_name
         new_mapping = None
         for mapping in mappings:
             if all(
@@ -312,6 +419,15 @@ class PyroGyroPad:
                 )
 
     def update(self):
+        timestamp_ms = int(time.time() * 1000)
+        self.led.update(timestamp_ms)
+        color = self.led.get_rgb_color()
+        color_r, color_g, color_b = (
+            int(color.x * 255),
+            int(color.y * 255),
+            int(color.z * 255),
+        )
+        sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
         self.vpad.update()
 
 

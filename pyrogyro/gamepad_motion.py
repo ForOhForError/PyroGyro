@@ -69,6 +69,20 @@ class Vec3:
         else:
             return Vec3(self.x - other, self.y - other, self.z - other)
 
+    @classmethod
+    def lerp(cls, start: "Vec3", end: "Vec3", delta: float):
+        return cls().set_lerp(start, end, delta)
+
+    def set_lerp(self, start: "Vec3", end: "Vec3", delta: float):
+        delta = clamp(delta, 1.0, 0.0)
+        deltnt = 1.0 - delta
+        self.x, self.y, self.z = (
+            start.x * deltnt + end.x * delta,
+            start.y * deltnt + end.y * delta,
+            start.z * deltnt + end.z * delta,
+        )
+        return self
+
     def cross(self, other):
         return Vec3(
             self.y * other.z - other.y * self.z,

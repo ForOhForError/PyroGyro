@@ -20,18 +20,7 @@ from pyrogyro.gamepad_motion import (
     gyro_camera_world,
     sensor_fusion_gravity,
 )
-from pyrogyro.io_types import (
-    XUSB_BUTTON,
-    DoubleAxisSource,
-    DoubleAxisTarget,
-    KeyboardKeyTarget,
-    SDLButtonSource,
-    SingleAxisSource,
-    SingleAxisTarget,
-    get_double_source_for_axis,
-    to_bool,
-    to_float,
-)
+from pyrogyro.io_types import *
 from pyrogyro.mapping import AutoloadConfig, Mapping
 from pyrogyro.math import *
 
@@ -53,6 +42,23 @@ class ColorSpace(enum.Enum):
             case self.RGB.value:
                 return in_color
         return in_color
+
+
+@dataclass
+class InputStore:
+    _inputs: typing.Mapping[BinarySource, typing.Union[Vec2, float, bool]] = field(
+        default_factory=dict
+    )
+    _changed: typing.Set[MapDirectSource] = field(default_factory=set)
+
+    def put_input(
+        self, source: MapDirectSource, value: typing.Union[Vec2, float, bool]
+    ):
+        self._inputs[source] = value
+        self._changed.add(source)
+
+    def get_inputs(self):
+        return {key: self._inputs[key] for key in self._changed}
 
 
 @dataclass
@@ -84,10 +90,10 @@ class LerpableLED:
             self.index_end = 0
         return self
 
-    def update(self, timestamp, units_in_second=1000.0):
+    def update(self, timestamp):
         if self.start_ts == None:
             self.start_ts = timestamp
-        time_delta = (timestamp - self.start_ts) / units_in_second
+        time_delta = timestamp - self.start_ts
         if self.duration_per_color == 0:
             delta = 0
         else:
@@ -130,8 +136,7 @@ class PyroGyroPad:
         )
         self.gyro_calibrating = False
         self.gyro_calibration = GyroCalibration()
-        self.last_gyro_timestamp = None
-        self.last_accel_timestamp = None
+        self.last_timestamp = None
         if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_GYRO):
             self.logger.info("Gyro Sensor Detected")
             sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_GYRO, True)
@@ -139,9 +144,10 @@ class PyroGyroPad:
             self.logger.info("Accel Sensor Detected")
             sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL, True)
 
-        self.left_stick = [0.0, 0.0]
-        self.right_stick = [0.0, 0.0]
-        self.mouse_stick = Vec2()
+        self.input_store = InputStore()
+
+        self.delta_time = 0
+        self.last_gyro_time = 0
 
         self.combo_sources = {}
         self.combo_presses_active = set()
@@ -150,6 +156,11 @@ class PyroGyroPad:
         self.accel_vec = Vec3()
         self.leftover_vel = Vec2()
         self.paired_axis_event_sink = {}
+
+    def cleanup(self):
+        if self.vpad:
+            self.vpad.unregister_notification()
+            del self.vpad
 
     def virtual_pad_callback(
         self, client, target, large_motor, small_motor, led_number, user_data
@@ -226,55 +237,27 @@ class PyroGyroPad:
             self.gyro_calibration.reset()
             self.gyro_calibrating = calibrating
 
-    def send_value(self, source_value, target_enum):
+    def send_value(self, source_value, target_enum, source=None):
         match type(target_enum):
             case pyrogyro.io_types.DoubleAxisTarget:
                 if isinstance(source_value, Vec2):
                     match target_enum:
-                        case DoubleAxisTarget.XUSB_GAMEPAD_LSTICK:
-                            self.left_stick[0], self.left_stick[1] = (
-                                source_value.x,
-                                source_value.y,
-                            )
+                        case DoubleAxisTarget.X_LSTICK:
                             self.vpad.left_joystick_float(
-                                self.left_stick[0], -self.left_stick[1]
+                                source_value.x, -source_value.y
                             )
-                        case DoubleAxisTarget.XUSB_GAMEPAD_RSTICK:
-                            self.right_stick[0], self.right_stick[1] = (
-                                source_value.x,
-                                source_value.y,
-                            )
+                        case DoubleAxisTarget.X_RSTICK:
                             self.vpad.right_joystick_float(
-                                self.right_stick[0], -self.right_stick[1]
+                                source_value.x, -source_value.y
                             )
             case pyrogyro.io_types.SingleAxisTarget:
                 float_val = to_float(source_value)
                 match target_enum:
-                    case SingleAxisTarget.XUSB_GAMEPAD_L2:
+                    case SingleAxisTarget.X_L2:
                         self.vpad.left_trigger_float(float_val)
-                    case SingleAxisTarget.XUSB_GAMEPAD_R2:
+                    case SingleAxisTarget.X_R2:
                         self.vpad.right_trigger_float(float_val)
-                    case SingleAxisTarget.XUSB_GAMEPAD_LSTICK_X:
-                        self.left_stick[0] = float_val
-                        self.vpad.left_joystick_float(
-                            self.left_stick[0], -self.left_stick[1]
-                        )
-                    case SingleAxisTarget.XUSB_GAMEPAD_LSTICK_Y:
-                        self.left_stick[1] = float_val
-                        self.vpad.left_joystick_float(
-                            self.left_stick[0], -self.left_stick[1]
-                        )
-                    case SingleAxisTarget.XUSB_GAMEPAD_RSTICK_X:
-                        self.right_stick[0] = float_val
-                        self.vpad.right_joystick_float(
-                            self.right_stick[0], -self.right_stick[1]
-                        )
-                    case SingleAxisTarget.XUSB_GAMEPAD_RSTICK_Y:
-                        self.right_stick[1] = float_val
-                        self.vpad.right_joystick_float(
-                            self.right_stick[0], -self.right_stick[1]
-                        )
-            case pyrogyro.io_types.XUSB_BUTTON:
+            case pyrogyro.io_types.ButtonTarget:
                 if to_bool(source_value):
                     self.vpad.press_button(target_enum.value)
                 else:
@@ -291,10 +274,16 @@ class PyroGyroPad:
                     pyautogui.mouseUp(button=target_enum.value)
             case pyrogyro.io_types.MouseTarget:
                 if isinstance(source_value, Vec2):
-                    self.mouse_stick.x, self.mouse_stick.y = (
-                        source_value.x,
-                        source_value.y,
-                    )
+                    if source == GyroSource.GYRO:
+                        self.move_mouse(
+                            source_value.x,
+                            source_value.y,
+                        )
+                    else:
+                        self.move_mouse(
+                            source_value.x * -3,
+                            source_value.y * -3,
+                        )
 
     def mouse_calib_mult(
         self,
@@ -322,10 +311,14 @@ class PyroGyroPad:
         pyautogui.moveTo(current_x - int(vel_x), current_y - int(vel_y))
         return vel_x % 1, vel_y % 1
 
+    def on_poll_start(self):
+        self.gyro_vec.set_value(0, 0, 0)
+        self.accel_vec.set_value(0, 0, 0)
+        self.delta_time = 0.0
+
     def handle_event(self, sdl_event):
-        gyro_x, gyro_y, gyro_z = 0.0, 0.0, 0.0
-        accel_x, accel_y, accel_z = 0.0, 0.0, 0.0
-        delta_time = 0
+        gyro_raw = Vec3()
+        accel = Vec3()
         match sdl_event.type:
             case sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN | sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
                 button_event = sdl_event.gbutton
@@ -335,94 +328,59 @@ class PyroGyroPad:
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
-                target_enum = self.mapping.mapping.get(enum_val)
-                if self.mapping._valid_for_combo(enum_val):
-                    if button_event.down:
-                        self.combo_sources[enum_val] = timestamp
-                    else:
-                        if enum_val in self.combo_sources:
-                            self.combo_sources.pop(enum_val)
-                if target_enum:
-                    self.send_value(button_event.down, target_enum)
+                self.input_store.put_input(enum_val, button_event.down)
             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
                 axis_id = axis_event.axis
                 enum_val = SingleAxisSource(axis_id)
-                target_enum = self.mapping.mapping.get(enum_val)
-                if target_enum:
-                    self.send_value(axis_event.value / 32768.0, target_enum)
-                else:
-                    double_enum = get_double_source_for_axis(enum_val)
-                    if double_enum in self.mapping.mapping:
-                        other_axis = double_enum.get_other_axis(enum_val)
-                        if other_axis not in self.paired_axis_event_sink:
-                            self.paired_axis_event_sink[enum_val] = (
-                                axis_event.value / 32768.0
-                            )
+                self.input_store.put_input(enum_val, axis_event.value / 32768.0)
+
+                double_enum = get_double_source_for_axis(enum_val)
+                if double_enum:
+                    other_axis = double_enum.get_other_axis(enum_val)
+                    if other_axis not in self.paired_axis_event_sink:
+                        self.paired_axis_event_sink[enum_val] = (
+                            axis_event.value / 32768.0
+                        )
+                    else:
+                        self.paired_axis_event_sink[enum_val] = (
+                            axis_event.value / 32768.0
+                        )
+                        this_value = axis_event.value / 32768.0
+                        other_value = self.paired_axis_event_sink.get(other_axis)
+                        if double_enum.value.index(enum_val) == 0:
+                            target_value = Vec2(this_value, other_value)
                         else:
-                            self.paired_axis_event_sink[enum_val] = (
-                                axis_event.value / 32768.0
-                            )
-                            target = self.mapping.mapping[double_enum]
-                            this_value = axis_event.value / 32768.0
-                            other_value = self.paired_axis_event_sink.get(other_axis)
-                            if double_enum.value.index(enum_val) == 0:
-                                target_value = Vec2(this_value, other_value)
-                            else:
-                                target_value = Vec2(other_value, this_value)
-                            self.send_value(target_value, target)
+                            target_value = Vec2(other_value, this_value)
+                        self.input_store.put_input(double_enum, target_value)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
                 sensor_type = sensor_event.sensor
+                timestamp = sensor_event.sensor_timestamp
                 if sensor_type == sdl3.SDL_SENSOR_GYRO:
-                    gyro_x, gyro_y, gyro_z = sensor_event.data  # pitch/yaw/roll
-                    timestamp = sensor_event.sensor_timestamp
-                    if self.last_gyro_timestamp == None:
-                        self.last_gyro_timestamp = timestamp
-                    delta_time = (
-                        timestamp - self.last_gyro_timestamp
-                    ) / 1000000.0  # convert to seconds
-                    self.last_gyro_timestamp = timestamp
+                    gyro_raw.set_value(*sensor_event.data)
+                    if self.last_gyro_time == None:
+                        self.last_gyro_time = timestamp
+                    self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
                 if sensor_type == sdl3.SDL_SENSOR_ACCEL:
-                    accel_x, accel_y, accel_z = sensor_event.data  # pitch/yaw/roll
-                    timestamp = sensor_event.sensor_timestamp
-                    if self.last_accel_timestamp == None:
-                        self.last_accel_timestamp = timestamp
-                    delta_time = (
-                        timestamp - self.last_accel_timestamp
-                    ) / 1000000.0  # convert to seconds
-                    self.last_accel_timestamp = timestamp
-                ##
-
-                self.gyro_vec.set_value(
-                    gyro_x,
-                    gyro_y,
-                    gyro_z,
-                )
-                self.accel_vec.set_value(
-                    accel_x,
-                    accel_y,
-                    accel_z,
-                )
+                    accel.set_value(*sensor_event.data)
+                self.gyro_vec += gyro_raw
+                self.accel_vec += accel
                 if self.gyro_calibrating:
-                    self.gyro_calibration.update(self.gyro_vec)
-                else:
-                    self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
-                    sensor_fusion_gravity(
-                        self.gravity, self.gyro_vec, self.accel_vec, delta_time
-                    )
-                    camera_vel = self.mapping.gyro.mode.gyro_camera(
-                        self.gyro_vec, self.gravity.normalized(), delta_time
-                    )
-                    self.move_mouse(
-                        camera_vel.x,
-                        camera_vel.y,
-                        calib_mult=self.mouse_calib_mult(),
-                    )
+                    self.gyro_calibration.update(gyro_raw)
+
+    def send_changed_input_values(self):
+        changed_inputs = self.input_store.get_inputs()
+        for source in changed_inputs:
+            target = self.mapping.mapping.get(source)
+            if target:
+                self.send_value(changed_inputs.get(source), target, source=source)
 
     def update(self, time_now: float):
-        timestamp_ms = int(time_now * 1000)
-        self.led.update(timestamp_ms)
+        if not self.last_timestamp:
+            self.last_timestamp = time_now
+        delta_time = time_now - self.last_timestamp
+        self.led.update(time_now)
         color = self.led.get_rgb_color()
         color_r, color_g, color_b = (
             int(color.x * 255),
@@ -430,6 +388,14 @@ class PyroGyroPad:
             int(color.z * 255),
         )
         sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
-        mouse_move = self.mouse_stick * -3.0
-        self.move_mouse(mouse_move.x, mouse_move.y)
+        self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
+        sensor_fusion_gravity(
+            self.gravity, self.gyro_vec, self.accel_vec, self.delta_time
+        )
+        camera_vel = self.mapping.gyro.mode.gyro_camera(
+            self.gyro_vec, self.gravity.normalized(), self.delta_time
+        )
+        self.input_store.put_input(GyroSource.GYRO, camera_vel)
+        self.send_changed_input_values()
         self.vpad.update()
+        self.last_timestamp = time_now

@@ -6,7 +6,7 @@ import typing
 import sdl3
 from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
 from pydantic import BaseModel, BeforeValidator, PlainSerializer
-from vgamepad import XUSB_BUTTON
+from vgamepad import DS4_BUTTONS, XUSB_BUTTON
 
 EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
@@ -30,6 +30,24 @@ def enum_or_by_name(T):
 KeyboardKeyTarget = enum.Enum(
     "KeyboardKeyTarget", {key.upper(): key for key in KEYBOARD_KEYS}
 )
+
+
+class ButtonTarget(enum.Enum):
+    X_A = XUSB_BUTTON.XUSB_GAMEPAD_A
+    X_B = XUSB_BUTTON.XUSB_GAMEPAD_B
+    X_X = XUSB_BUTTON.XUSB_GAMEPAD_X
+    X_Y = XUSB_BUTTON.XUSB_GAMEPAD_Y
+    X_DOWN = XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN
+    X_LEFT = XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT
+    X_RIGHT = XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT
+    X_UP = XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP
+    X_L1 = XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER
+    X_L3 = XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB
+    X_R1 = XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER
+    X_R3 = XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB
+    X_START = XUSB_BUTTON.XUSB_GAMEPAD_START
+    X_BACK = XUSB_BUTTON.XUSB_GAMEPAD_BACK
+    X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
 
 class MouseTarget(enum.Enum):
@@ -95,23 +113,32 @@ class DoubleAxisSource(enum.Enum):
 
 
 class SingleAxisTarget(enum.Enum):
-    XUSB_GAMEPAD_L2 = "XUSB_GAMEPAD_L2"
-    XUSB_GAMEPAD_R2 = "XUSB_GAMEPAD_R2"
-    XUSB_GAMEPAD_LSTICK_X = "XUSB_GAMEPAD_LSTICK_X"
-    XUSB_GAMEPAD_LSTICK_Y = "XUSB_GAMEPAD_LSTICK_Y"
-    XUSB_GAMEPAD_RSTICK_X = "XUSB_GAMEPAD_RSTICK_X"
-    XUSB_GAMEPAD_RSTICK_Y = "XUSB_GAMEPAD_RSTICK_Y"
+    X_L2 = "X_L2"
+    X_R2 = "X_R2"
+    X_LSTICK_X = "X_LSTICK_X"
+    X_LSTICK_Y = "X_LSTICK_Y"
+    X_RSTICK_X = "X_RSTICK_X"
+    X_RSTICK_Y = "X_RSTICK_Y"
 
 
 class DoubleAxisTarget(enum.Enum):
-    XUSB_GAMEPAD_LSTICK = (
-        SingleAxisTarget.XUSB_GAMEPAD_LSTICK_X,
-        SingleAxisTarget.XUSB_GAMEPAD_LSTICK_Y,
+    X_LSTICK = (
+        SingleAxisTarget.X_LSTICK_X,
+        SingleAxisTarget.X_LSTICK_Y,
     )
-    XUSB_GAMEPAD_RSTICK = (
-        SingleAxisTarget.XUSB_GAMEPAD_RSTICK_X,
-        SingleAxisTarget.XUSB_GAMEPAD_RSTICK_Y,
+    X_RSTICK = (
+        SingleAxisTarget.X_RSTICK_X,
+        SingleAxisTarget.X_RSTICK_Y,
     )
+
+
+class GyroSource(enum.Enum):
+    GYRO = "GYRO"
+
+
+Vec2Source = typing.Union[enum_or_by_name(DoubleAxisSource), GyroSource]
+FloatSource = typing.Union[enum_or_by_name(SingleAxisSource)]
+BinarySource = typing.Union[enum_or_by_name(SDLButtonSource)]
 
 
 def get_double_source_for_axis(single_axis_source):
@@ -121,14 +148,11 @@ def get_double_source_for_axis(single_axis_source):
     return None
 
 
-MapDirectSource = typing.Union[
-    enum_or_by_name(DoubleAxisSource),
-    enum_or_by_name(SingleAxisSource),
-    enum_or_by_name(SDLButtonSource),
-]
+MapDirectSource = typing.Union[Vec2Source, FloatSource, BinarySource]
+
 MapDirectTarget = typing.Union[
     enum_or_by_name(KeyboardKeyTarget),
-    enum_or_by_name(XUSB_BUTTON),
+    enum_or_by_name(ButtonTarget),
     enum_or_by_name(SingleAxisTarget),
     enum_or_by_name(DoubleAxisTarget),
     enum_or_by_name(MouseButtonTarget),

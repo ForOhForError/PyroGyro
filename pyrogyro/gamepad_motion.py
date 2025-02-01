@@ -167,7 +167,7 @@ class GyroMode(enum.Enum):
 
 
 @dataclass
-class GyroSource:
+class GyroConfig:
     gyro_mode: enum_or_by_name(GyroMode) = GyroMode.OFF
     gyro_sens: float = 1.0
 

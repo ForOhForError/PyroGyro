@@ -253,12 +253,15 @@ class PyroGyroMapper:
                 self.logger.info(f"Removing pad for removed device {joy_uuid}")
                 to_remove.append(joy_uuid)
         for joy_uuid in to_remove:
-            self.pyropads.pop(joy_uuid)
+            pyropad = self.pyropads.pop(joy_uuid)
+            pyropad.cleanup()
 
     def input_poll(self):
         while self.running:
             populate_pads = False
             event = sdl3.SDL_Event()
+            for pypad in self.pyropads.values():
+                pypad.on_poll_start()
             while sdl3.SDL_PollEvent(event):
                 match event.type:
                     case evt_type if evt_type in EVENT_TYPES_PASS_TO_PAD:
@@ -287,9 +290,8 @@ class PyroGyroMapper:
                     exe_name, window_title = "pyrogyro.exe", "PyroGyro Console"
                 self.autoload_refresh_and_evaluate(exe_name, window_title)
             sdl3.SDL_UpdateGamepads()
-            time_now = time.time()
             for pypad in self.pyropads.values():
-                pypad.update(time_now)
+                pypad.update(time.time())
             time.sleep(1.0 / self.poll_rate)
 
     def run(self):

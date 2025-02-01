@@ -5,9 +5,9 @@ import typing
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
-from pyrogyro.gamepad_motion import GyroMode, GyroSource
+from pyrogyro.gamepad_motion import GyroConfig, GyroMode
 from pyrogyro.io_types import (
-    XUSB_BUTTON,
+    ButtonTarget,
     DoubleAxisSource,
     DoubleAxisTarget,
     MapComplexTarget,
@@ -24,7 +24,7 @@ yaml.compact(seq_seq=False, seq_map=False)
 
 
 class GyroMapping(BaseModel):
-    mode: GyroSource = GyroSource()
+    mode: GyroConfig = Field(default_factory=GyroConfig)
     output: typing.Optional[enum_or_by_name(DoubleAxisTarget)] = None
 
 
@@ -107,25 +107,25 @@ def get_default_mapping():
         autoload=AutoloadConfig.get_match_all(),
         mapping=dict(
             {
-                SDLButtonSource.N: XUSB_BUTTON.XUSB_GAMEPAD_Y,
-                SDLButtonSource.S: XUSB_BUTTON.XUSB_GAMEPAD_A,
-                SDLButtonSource.E: XUSB_BUTTON.XUSB_GAMEPAD_B,
-                SDLButtonSource.W: XUSB_BUTTON.XUSB_GAMEPAD_X,
-                SDLButtonSource.BACK: XUSB_BUTTON.XUSB_GAMEPAD_BACK,
-                SDLButtonSource.START: XUSB_BUTTON.XUSB_GAMEPAD_START,
-                SDLButtonSource.UP: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
-                SDLButtonSource.DOWN: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
-                SDLButtonSource.LEFT: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
-                SDLButtonSource.RIGHT: XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
-                SDLButtonSource.L1: XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER,
-                SDLButtonSource.R1: XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER,
-                SDLButtonSource.L3: XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB,
-                SDLButtonSource.R3: XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB,
-                SDLButtonSource.GUIDE: XUSB_BUTTON.XUSB_GAMEPAD_GUIDE,
-                SingleAxisSource.L2: SingleAxisTarget.XUSB_GAMEPAD_L2,
-                SingleAxisSource.R2: SingleAxisTarget.XUSB_GAMEPAD_R2,
-                DoubleAxisSource.LSTICK: DoubleAxisTarget.XUSB_GAMEPAD_LSTICK,
-                DoubleAxisSource.RSTICK: DoubleAxisTarget.XUSB_GAMEPAD_RSTICK,
+                SDLButtonSource.N: ButtonTarget.X_Y,
+                SDLButtonSource.S: ButtonTarget.X_A,
+                SDLButtonSource.E: ButtonTarget.X_B,
+                SDLButtonSource.W: ButtonTarget.X_X,
+                SDLButtonSource.BACK: ButtonTarget.X_BACK,
+                SDLButtonSource.START: ButtonTarget.X_START,
+                SDLButtonSource.UP: ButtonTarget.X_UP,
+                SDLButtonSource.DOWN: ButtonTarget.X_DOWN,
+                SDLButtonSource.LEFT: ButtonTarget.X_LEFT,
+                SDLButtonSource.RIGHT: ButtonTarget.X_RIGHT,
+                SDLButtonSource.L1: ButtonTarget.X_L1,
+                SDLButtonSource.R1: ButtonTarget.X_R1,
+                SDLButtonSource.L3: ButtonTarget.X_L3,
+                SDLButtonSource.R3: ButtonTarget.X_R3,
+                SDLButtonSource.GUIDE: ButtonTarget.X_GUIDE,
+                SingleAxisSource.L2: SingleAxisTarget.X_L2,
+                SingleAxisSource.R2: SingleAxisTarget.X_R2,
+                DoubleAxisSource.LSTICK: DoubleAxisTarget.X_LSTICK,
+                DoubleAxisSource.RSTICK: DoubleAxisTarget.X_RSTICK,
             }
         ),
     )

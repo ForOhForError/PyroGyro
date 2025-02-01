@@ -7,6 +7,7 @@ mapping:
   L2: RMOUSE
   R2: LMOUSE
   RSTICK: MOUSE
+  GYRO: MOUSE
 gyro:
   mode: 
     gyro_mode: PLAYER_TURN

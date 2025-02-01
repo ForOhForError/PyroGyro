@@ -145,6 +145,7 @@ class PyroGyroPad:
             sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL, True)
 
         self.input_store = InputStore()
+        self.mkb_state = {}
 
         self.delta_time = 0
         self.last_gyro_time = 0
@@ -182,6 +183,20 @@ class PyroGyroPad:
         sdl3.SDL_RumbleGamepad(
             self.sdl_pad, low_frequency_rumble, high_frequency_rumble, 1000
         )
+
+    def set_mkb_bool_state(self, target_enum, target_value):
+        old_value = self.mkb_state.get(target_enum, False)
+        if isinstance(target_enum, MouseButtonTarget) and old_value != target_value:
+            if target_value:
+                pyautogui.mouseDown(button=target_enum.value)
+            else:
+                pyautogui.mouseUp(button=target_enum.value)
+        elif isinstance(target_enum, KeyboardKeyTarget) and old_value != target_value:
+            if target_value:
+                pyautogui.keyDown(target_enum.value)
+            else:
+                pyautogui.keyUp(target_enum.value)
+        self.mkb_state[target_enum] = target_value
 
     @property
     def real_controller_name(self):
@@ -263,15 +278,9 @@ class PyroGyroPad:
                 else:
                     self.vpad.release_button(target_enum.value)
             case pyrogyro.io_types.KeyboardKeyTarget:
-                if to_bool(source_value):
-                    pyautogui.keyDown(target_enum.value)
-                else:
-                    pyautogui.keyUp(target_enum.value)
+                self.set_mkb_bool_state(target_enum, to_bool(source_value))
             case pyrogyro.io_types.MouseButtonTarget:
-                if to_bool(source_value):
-                    pyautogui.mouseDown(button=target_enum.value)
-                else:
-                    pyautogui.mouseUp(button=target_enum.value)
+                self.set_mkb_bool_state(target_enum, to_bool(source_value))
             case pyrogyro.io_types.MouseTarget:
                 if isinstance(source_value, Vec2):
                     if source == GyroSource.GYRO:

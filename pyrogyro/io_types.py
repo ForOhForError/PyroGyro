@@ -86,6 +86,13 @@ class DoubleAxisSource(enum.Enum):
     LSTICK = (SingleAxisSource.LSTICK_X, SingleAxisSource.LSTICK_Y)
     RSTICK = (SingleAxisSource.RSTICK_X, SingleAxisSource.RSTICK_Y)
 
+    def get_other_axis(self, axis_enum):
+        if axis_enum == self.value[0]:
+            return self.value[1]
+        elif axis_enum == self.value[1]:
+            return self.value[0]
+        return None
+
 
 class SingleAxisTarget(enum.Enum):
     XUSB_GAMEPAD_L2 = "XUSB_GAMEPAD_L2"
@@ -107,12 +114,11 @@ class DoubleAxisTarget(enum.Enum):
     )
 
 
-def getPossibleAxisPairs(singleAxisSource):
-    matches = []
-    for doubleAxisEnum in DoubleAxisSource:
-        if singleAxisSource in doubleAxisEnum.value:
-            matches.append(doubleAxisEnum)
-    return matches
+def get_double_source_for_axis(single_axis_source):
+    for double_axis_enum in DoubleAxisSource:
+        if single_axis_source in double_axis_enum.value:
+            return double_axis_enum
+    return None
 
 
 MapDirectSource = typing.Union[

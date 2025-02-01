@@ -5,10 +5,34 @@
 
 import enum
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pyrogyro.io_types import enum_or_by_name
 from pyrogyro.math import *
+
+
+@dataclass
+class GyroCalibration:
+    calibration: Vec3 = field(default_factory=Vec3)
+    num_samples: int = 0
+
+    def reset(self):
+        self.calibration.set_value(0, 0, 0)
+        self.num_samples = 0
+
+    def update(self, vel_sample: Vec3):
+        self.num_samples += 1
+        self.calibration += vel_sample
+
+    @property
+    def calibration_offset(self):
+        if self.num_samples == 0:
+            return Vec3()
+        else:
+            return self.calibration / self.num_samples
+
+    def calibrated(self, uncalibrated_gyro):
+        return uncalibrated_gyro - self.calibration_offset
 
 
 def sensor_fusion_gravity(

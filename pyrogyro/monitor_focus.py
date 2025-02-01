@@ -122,7 +122,7 @@ class WindowChangeEventListener(object):
         ole32.CoUninitialize()
 
     def listen_in_thread(self):
-        listen_thread = threading.Thread(target=self.listen)
+        listen_thread = threading.Thread(target=self.listen, daemon=True)
         listen_thread.start()
         return listen_thread
 

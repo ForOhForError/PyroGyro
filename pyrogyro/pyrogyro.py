@@ -87,6 +87,7 @@ class PyroGyroMapper:
         self.window_listener = None
         self.platform = platform.system()
         self.do_platform_setup()
+        self.calibrating = False
 
         self.pyropads = {}
         self.autoload_configs = {}
@@ -156,6 +157,36 @@ class PyroGyroMapper:
                 callback=self.on_focus_change
             )
             self.window_listener.listen_in_thread()
+
+    def start_calibration(self):
+        self.logger.info("Starting gyro calibration on all devices")
+        for pyropad in self.pyropads.values():
+            pyropad.set_gyro_calibrating(True)
+
+    def end_calibration(self):
+        self.logger.info("Ending gyro calibration on all devices")
+        for pyropad in self.pyropads.values():
+            pyropad.set_gyro_calibrating(False)
+
+    def handle_console_input(self, console_input: str):
+        match console_input:
+            case com if "calibrating".startswith(com.lower()):
+                self.calibrating = not self.calibrating
+                if self.calibrating:
+                    self.start_calibration()
+                else:
+                    self.end_calibration()
+
+    def console_input_loop(self):
+        try:
+            while True:
+                console_input = input("")
+                self.handle_console_input(console_input)
+        except (EOFError, KeyboardInterrupt):
+            pass
+
+    def start_console_input_thread(self):
+        threading.Thread(target=self.console_input_loop, daemon=True).start()
 
     def toggle_vis(self, *args):
         self.visible = not self.visible
@@ -261,9 +292,6 @@ class PyroGyroMapper:
                 pypad.update(time_now)
             time.sleep(1.0 / self.poll_rate)
 
-    def process_sdl_event(self, event):
-        pass
-
     def run(self):
         self.logger.info("PyroGyro Starting")
         for module_name in SHOW_STARTUP_VERSION_MODULES:
@@ -272,6 +300,7 @@ class PyroGyroMapper:
             )
         self.init_systray()
         self.init_window_listener()
+        self.start_console_input_thread()
         sdl3.SDL_SetEventFilter(event_filter, None)
 
         self.refresh_autoload_mappings()

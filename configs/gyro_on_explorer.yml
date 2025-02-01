@@ -1,0 +1,13 @@
+name: Gyro On Explorer
+autoload:
+  match_exe_name: explorer.exe
+  match_window_name: .*
+  match_controller_name: .*
+mapping:
+  L2: RMOUSE
+  R2: LMOUSE
+  RSTICK: MOUSE
+gyro:
+  mode: 
+    gyro_mode: PLAYER_TURN
+    gyro_sens: 3

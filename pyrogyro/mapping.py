@@ -63,6 +63,11 @@ class Mapping(BaseModel):
         self._loaded_yml_map = None
         self._combo_map = {}
 
+    def count_autoload_specificity(self):
+        if self.autoload:
+            return self.autoload.count_specificity()
+        return 0
+
     def add_mapping(self, source: MapSource, button_out: MapTarget):
         self.mapping[source] = MapTarget
         self._update_combo_mappings()

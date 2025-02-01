@@ -15,6 +15,12 @@ class Vec2:
     x: float = 0
     y: float = 0
 
+    def __mul__(self, other):
+        return Vec2(self.x * other, self.y * other)
+
+    def set_value(self, x: float, y: float):
+        self.x, self.y = x, y
+
     def length(self):
         return math.sqrt(self.x**2 + self.y**2)
 
@@ -40,8 +46,15 @@ class Vec3:
     y: float = 0
     z: float = 0
 
+    def set_value(self, x: float, y: float, z: float):
+        self.x, self.y, self.z = x, y, z
+
     def is_zero_vector(self):
         return self.x == 0 and self.y == 0 and self.z == 0
+
+    def __truediv__(self, other):
+        other = float(other)
+        return Vec3(self.x / other, self.y / other, self.z / other)
 
     def __mul__(self, other):
         if isinstance(other, Vec3):

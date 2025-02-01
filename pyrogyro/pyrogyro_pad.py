@@ -1,16 +1,18 @@
 import colorsys
-import dataclasses
 import enum
 import logging
 import re
 import typing
 import uuid
+from dataclasses import dataclass, field
 
 import pyautogui
 import sdl3
 import vgamepad as vg
 
+import pyrogyro
 from pyrogyro.gamepad_motion import (
+    GyroCalibration,
     gyro_camera_local,
     gyro_camera_local_ow,
     gyro_camera_player_lean,
@@ -26,7 +28,7 @@ from pyrogyro.io_types import (
     SDLButtonSource,
     SingleAxisSource,
     SingleAxisTarget,
-    getPossibleAxisPairs,
+    get_double_source_for_axis,
     to_bool,
     to_float,
 )
@@ -53,22 +55,25 @@ class ColorSpace(enum.Enum):
         return in_color
 
 
-@dataclasses.dataclass
+@dataclass
 class LerpableLED:
-    current_color: Vec3 = Vec3
-    color_sequence: typing.Sequence[Vec3] = dataclasses.field(default_factory=list)
+    current_color: Vec3 = field(default_factory=Vec3)
+    color_sequence: typing.Sequence[Vec3] = field(default_factory=list)
     index_start: int = 0
     index_end: int = 0
     start_ts: typing.Optional[int] = None
     duration_per_color: float = 1
     color_space: ColorSpace = ColorSpace.RGB
+    instant_loop: bool = False
 
     def set_sequence(
         self,
         color_sequence: typing.Sequence[Vec3],
         color_space=ColorSpace.RGB,
         duration_per_color=1,
+        instant_loop=False,
     ):
+        self.instant_loop = instant_loop
         self.color_sequence = color_sequence
         self.color_space = color_space
         self.index_start = 0
@@ -91,10 +96,17 @@ class LerpableLED:
             self.color_sequence[self.index_start],
             self.color_sequence[self.index_end],
         )
-        self.current_color.set_lerp(self.current_color, start, end, delta)
+        self.current_color.set_lerp(start, end, delta)
         if delta >= 1.0:
-            self.index_start = (self.index_start + 1) % len(self.color_sequence)
-            self.index_end = (self.index_end + 1) % len(self.color_sequence)
+            self.index_start = self.index_start + 1
+            self.index_end = self.index_end + 1
+            len_seq = len(self.color_sequence)
+            if self.index_start == len_seq - 1 and self.instant_loop:
+                self.index_start = 0
+                self.index_end = 1 if len_seq > 1 else 0
+            else:
+                self.index_start = self.index_start % len_seq
+                self.index_end = self.index_end % len_seq
             self.start_ts = timestamp
 
     def get_rgb_color(self):
@@ -111,8 +123,13 @@ class PyroGyroPad:
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
         self.vpad.register_notification(callback_function=self.virtual_pad_callback)
         self.led = LerpableLED().set_sequence(
-            ROYGBIV, color_space=ColorSpace.HSV, duration_per_color=5
+            ROYGBIV,
+            color_space=ColorSpace.HSV,
+            duration_per_color=10,
+            instant_loop=True,
         )
+        self.gyro_calibrating = False
+        self.gyro_calibration = GyroCalibration()
         self.last_gyro_timestamp = None
         self.last_accel_timestamp = None
         if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_GYRO):
@@ -124,6 +141,7 @@ class PyroGyroPad:
 
         self.left_stick = [0.0, 0.0]
         self.right_stick = [0.0, 0.0]
+        self.mouse_stick = Vec2()
 
         self.combo_sources = {}
         self.combo_presses_active = set()
@@ -131,6 +149,7 @@ class PyroGyroPad:
         self.gyro_vec = Vec3()
         self.accel_vec = Vec3()
         self.leftover_vel = Vec2()
+        self.paired_axis_event_sink = {}
 
     def virtual_pad_callback(
         self, client, target, large_motor, small_motor, led_number, user_data
@@ -183,14 +202,14 @@ class PyroGyroPad:
             if len(potential_mappings) == 1:
                 new_mapping = potential_mappings[0]
             else:
-                potential_mappings.sort(key=AutoloadConfig.count_specificity)
+                potential_mappings.sort(key=Mapping.count_autoload_specificity)
                 best_match = potential_mappings[-1]
                 final_value = best_match.autoload.count_specificity()
                 remaining_mappings = len(
                     [
                         mapping
                         for mapping in potential_mappings
-                        if mapping.count_specificity() == final_value
+                        if mapping.autoload.count_specificity() == final_value
                     ]
                 )
                 if remaining_mappings == 1:
@@ -201,8 +220,33 @@ class PyroGyroPad:
             )
             self.mapping = new_mapping
 
+    def set_gyro_calibrating(self, calibrating: bool):
+        self.gyro_calibrating = calibrating
+        if calibrating:
+            self.gyro_calibration.reset()
+            self.gyro_calibrating = calibrating
+
     def send_value(self, source_value, target_enum):
         match type(target_enum):
+            case pyrogyro.io_types.DoubleAxisTarget:
+                if isinstance(source_value, Vec2):
+                    match target_enum:
+                        case DoubleAxisTarget.XUSB_GAMEPAD_LSTICK:
+                            self.left_stick[0], self.left_stick[1] = (
+                                source_value.x,
+                                source_value.y,
+                            )
+                            self.vpad.left_joystick_float(
+                                self.left_stick[0], -self.left_stick[1]
+                            )
+                        case DoubleAxisTarget.XUSB_GAMEPAD_RSTICK:
+                            self.right_stick[0], self.right_stick[1] = (
+                                source_value.x,
+                                source_value.y,
+                            )
+                            self.vpad.right_joystick_float(
+                                self.right_stick[0], -self.right_stick[1]
+                            )
             case pyrogyro.io_types.SingleAxisTarget:
                 float_val = to_float(source_value)
                 match target_enum:
@@ -245,6 +289,12 @@ class PyroGyroPad:
                     pyautogui.mouseDown(button=target_enum.value)
                 else:
                     pyautogui.mouseUp(button=target_enum.value)
+            case pyrogyro.io_types.MouseTarget:
+                if isinstance(source_value, Vec2):
+                    self.mouse_stick.x, self.mouse_stick.y = (
+                        source_value.x,
+                        source_value.y,
+                    )
 
     def mouse_calib_mult(
         self,
@@ -299,14 +349,28 @@ class PyroGyroPad:
                 axis_id = axis_event.axis
                 enum_val = SingleAxisSource(axis_id)
                 target_enum = self.mapping.mapping.get(enum_val)
-                if not target_enum:
-                    for double_enum in getPossibleAxisPairs(enum_val):
-                        if double_enum in self.mapping.mapping:
-                            source_1, source_2 = double_enum.value
-                            target_1, target_2 = self.mapping.mapping[double_enum].value
-                            target_enum = target_1 if enum_val == source_1 else target_2
                 if target_enum:
                     self.send_value(axis_event.value / 32768.0, target_enum)
+                else:
+                    double_enum = get_double_source_for_axis(enum_val)
+                    if double_enum in self.mapping.mapping:
+                        other_axis = double_enum.get_other_axis(enum_val)
+                        if other_axis not in self.paired_axis_event_sink:
+                            self.paired_axis_event_sink[enum_val] = (
+                                axis_event.value / 32768.0
+                            )
+                        else:
+                            self.paired_axis_event_sink[enum_val] = (
+                                axis_event.value / 32768.0
+                            )
+                            target = self.mapping.mapping[double_enum]
+                            this_value = axis_event.value / 32768.0
+                            other_value = self.paired_axis_event_sink.get(other_axis)
+                            if double_enum.value.index(enum_val) == 0:
+                                target_value = Vec2(this_value, other_value)
+                            else:
+                                target_value = Vec2(other_value, this_value)
+                            self.send_value(target_value, target)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
                 sensor_type = sensor_event.sensor
@@ -330,29 +394,31 @@ class PyroGyroPad:
                     self.last_accel_timestamp = timestamp
                 ##
 
-                self.gyro_vec.x, self.gyro_vec.y, self.gyro_vec.z = (
+                self.gyro_vec.set_value(
                     gyro_x,
                     gyro_y,
                     gyro_z,
                 )
-                self.accel_vec.x, self.accel_vec.y, self.accel_vec.z = (
+                self.accel_vec.set_value(
                     accel_x,
                     accel_y,
                     accel_z,
                 )
-                sensor_fusion_gravity(
-                    self.gravity, self.gyro_vec, self.accel_vec, delta_time
-                )
-                camera_vel = self.mapping.gyro.mode.gyro_camera(
-                    self.gyro_vec, self.gravity.normalized(), delta_time
-                )
-                self.leftover_vel.x, self.leftover_vel.y = self.move_mouse(
-                    camera_vel.x,
-                    camera_vel.y,
-                    calib_mult=self.mouse_calib_mult(),
-                    extra_x=self.leftover_vel.x,
-                    extra_y=self.leftover_vel.y,
-                )
+                if self.gyro_calibrating:
+                    self.gyro_calibration.update(self.gyro_vec)
+                else:
+                    self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
+                    sensor_fusion_gravity(
+                        self.gravity, self.gyro_vec, self.accel_vec, delta_time
+                    )
+                    camera_vel = self.mapping.gyro.mode.gyro_camera(
+                        self.gyro_vec, self.gravity.normalized(), delta_time
+                    )
+                    self.move_mouse(
+                        camera_vel.x,
+                        camera_vel.y,
+                        calib_mult=self.mouse_calib_mult(),
+                    )
 
     def update(self, time_now: float):
         timestamp_ms = int(time_now * 1000)
@@ -364,4 +430,6 @@ class PyroGyroPad:
             int(color.z * 255),
         )
         sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
+        mouse_move = self.mouse_stick * -3.0
+        self.move_mouse(mouse_move.x, mouse_move.y)
         self.vpad.update()

@@ -13,6 +13,7 @@ from pyrogyro.io_types import (
     MapComplexTarget,
     MapSource,
     MapTarget,
+    MapDirectTarget,
     SDLButtonSource,
     SingleAxisSource,
     SingleAxisTarget,
@@ -55,7 +56,7 @@ class AutoloadConfig(BaseModel):
 class Mapping(BaseModel):
     name: str = "Empty Mapping"
     autoload: typing.Optional[AutoloadConfig] = None
-    mapping: collections.abc.Mapping[MapSource, MapTarget] = CommentedMap()
+    mapping: collections.abc.Mapping[MapSource, MapDirectTarget] = CommentedMap()
     gyro: GyroMapping = GyroMapping()
 
     def __init__(self, *args, **kwargs):

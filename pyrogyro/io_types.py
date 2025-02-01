@@ -4,7 +4,7 @@ import logging
 import typing
 
 import sdl3
-from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
+from pynput import mouse, keyboard
 from pydantic import BaseModel, BeforeValidator, PlainSerializer
 from vgamepad import DS4_BUTTONS, XUSB_BUTTON
 
@@ -26,9 +26,13 @@ def enum_or_by_name(T):
         T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
     ]
 
+BINDABLE_KEYS = "0123456789abcdefghijklmnopqrstuvwxyz~-=\/.,;'[]*+-"
+
+keyboard_key_dict = {str(key).upper().replace("KEY.", ""): key for key in keyboard.Key}
+keyboard_key_dict.update({key.upper(): key for key in BINDABLE_KEYS})
 
 KeyboardKeyTarget = enum.Enum(
-    "KeyboardKeyTarget", {key.upper(): key for key in KEYBOARD_KEYS}
+    "KeyboardKeyTarget", keyboard_key_dict
 )
 
 
@@ -55,9 +59,9 @@ class MouseTarget(enum.Enum):
 
 
 class MouseButtonTarget(enum.Enum):
-    LMOUSE = PRIMARY
-    RMOUSE = SECONDARY
-    MMOUSE = MIDDLE
+    LMOUSE = mouse.Button.left
+    RMOUSE = mouse.Button.right
+    MMOUSE = mouse.Button.middle
 
 
 class SDLButtonSource(enum.Enum):

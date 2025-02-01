@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import pyautogui
+from pynput import mouse, keyboard
 import sdl3
 import vgamepad as vg
 
@@ -145,6 +146,8 @@ class PyroGyroPad:
             sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL, True)
 
         self.input_store = InputStore()
+        self.mouse_controller = mouse.Controller()
+        self.keyboard_controller = keyboard.Controller()
         self.mkb_state = {}
 
         self.delta_time = 0
@@ -188,14 +191,14 @@ class PyroGyroPad:
         old_value = self.mkb_state.get(target_enum, False)
         if isinstance(target_enum, MouseButtonTarget) and old_value != target_value:
             if target_value:
-                pyautogui.mouseDown(button=target_enum.value)
+                self.mouse_controller.press(target_enum.value)
             else:
-                pyautogui.mouseUp(button=target_enum.value)
+                self.mouse_controller.release(target_enum.value)
         elif isinstance(target_enum, KeyboardKeyTarget) and old_value != target_value:
             if target_value:
-                pyautogui.keyDown(target_enum.value)
+                self.keyboard_controller.press(target_enum.value)
             else:
-                pyautogui.keyUp(target_enum.value)
+                self.keyboard_controller.release(target_enum.value)
         self.mkb_state[target_enum] = target_value
 
     @property
@@ -316,8 +319,9 @@ class PyroGyroPad:
     ):
         vel_x = x + extra_x
         vel_y = y + extra_y
-        current_x, current_y = pyautogui.position()
-        pyautogui.moveTo(current_x - int(vel_x), current_y - int(vel_y))
+        #current_x, current_y = pyautogui.position()
+        #pyautogui.moveTo(current_x - int(vel_x), current_y - int(vel_y))
+        self.mouse_controller.move(-int(vel_x), -int(vel_y))
         return vel_x % 1, vel_y % 1
 
     def on_poll_start(self):

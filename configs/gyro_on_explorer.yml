@@ -11,4 +11,4 @@ mapping:
 gyro:
   mode: 
     gyro_mode: PLAYER_TURN
-    gyro_sens: 3
+    gyro_sens: 1

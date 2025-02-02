@@ -372,6 +372,8 @@ class PyroGyroPad:
                 if sensor_type == sdl3.SDL_SENSOR_GYRO:
                     self.gyro_update = True
                     gyro_raw.set_value(*sensor_event.data)
+                    # SDL3 outputs gyro in radians per second
+                    gyro_raw *= RADIANS_TO_DEGREES
                     if self.last_gyro_time == None:
                         self.last_gyro_time = timestamp
                     self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
@@ -407,10 +409,10 @@ class PyroGyroPad:
             sensor_fusion_gravity(
                 self.gravity, self.gyro_vec, self.accel_vec, self.delta_time
             )
-            camera_vel = self.mapping.gyro.mode.gyro_camera(
+            pixel_vel = self.mapping.gyro.mode.gyro_pixels(
                 self.gyro_vec, self.gravity.normalized(), self.delta_time
             )
-            self.input_store.put_input(GyroSource.GYRO, camera_vel)
+            self.input_store.put_input(GyroSource.GYRO, pixel_vel)
         self.send_changed_input_values()
         self.vpad.update()
         self.last_timestamp = time_now

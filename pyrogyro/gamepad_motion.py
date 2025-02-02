@@ -170,26 +170,34 @@ class GyroMode(enum.Enum):
 class GyroConfig:
     gyro_mode: enum_or_by_name(GyroMode) = GyroMode.OFF
     gyro_sens: float = 1.0
+    real_world_sens: float = 5.33333
+    in_game_sens: float = 1.0
 
     def gyro_camera(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
+        gyro_sens = self.gyro_sens
         match self.gyro_mode:
             case GyroMode.OFF:
                 return Vec2(0, 0)
             case GyroMode.LOCAL:
-                return gyro_camera_local(gyro, delta_seconds, gyro_sens=self.gyro_sens)
+                return gyro_camera_local(gyro, delta_seconds, gyro_sens=gyro_sens)
             case GyroMode.LOCAL_OW:
-                return gyro_camera_local_ow(
-                    gyro, delta_seconds, gyro_sens=self.gyro_sens
-                )
+                return gyro_camera_local_ow(gyro, delta_seconds, gyro_sens=gyro_sens)
             case GyroMode.WORLD:
                 return gyro_camera_world(
-                    gyro, grav_norm, delta_seconds, gyro_sens=self.gyro_sens
+                    gyro, grav_norm, delta_seconds, gyro_sens=gyro_sens
                 )
             case GyroMode.PLAYER_TURN:
                 return gyro_camera_player_turn(
-                    gyro, grav_norm, delta_seconds, gyro_sens=self.gyro_sens
+                    gyro, grav_norm, delta_seconds, gyro_sens=gyro_sens
                 )
             case GyroMode.PLAYER_LEAN:
                 return gyro_camera_player_lean(
-                    gyro, grav_norm, delta_seconds, gyro_sens=self.gyro_sens
+                    gyro, grav_norm, delta_seconds, gyro_sens=gyro_sens
                 )
+
+    def gyro_pixels(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
+        os_mouse_speed = 1
+        mouse_calib = self.real_world_sens / os_mouse_speed / self.in_game_sens
+        camera_vec = self.gyro_camera(gyro, grav_norm, delta_seconds)
+        camera_vec *= mouse_calib
+        return camera_vec

@@ -10,6 +10,9 @@ def sign(input):
     return -1 if input < 0 else 1
 
 
+RADIANS_TO_DEGREES = 360 / (2 * math.pi)
+
+
 @dataclass
 class Vec2:
     x: float = 0

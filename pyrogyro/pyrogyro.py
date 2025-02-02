@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 
 import pyautogui
+import pydirectinput
 import sdl3
 import vgamepad as vg
 from infi.systray import SysTrayIcon
@@ -38,6 +39,8 @@ from pyrogyro.math import *
 from pyrogyro.monitor_focus import WindowChangeEventListener
 from pyrogyro.pyrogyro_pad import PyroGyroPad
 
+pydirectinput.FAILSAFE = False
+pydirectinput.PAUSE = 0
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0
 

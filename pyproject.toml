@@ -17,6 +17,7 @@ flask-sock = "^0.7.0"
 pydantic = "^2.10.6"
 ruamel-yaml = "^0.18.10"
 psutil = "^6.1.1"
+pydirectinput = "^1.0.4"
 
 [tool.poetry.scripts]
 pyrogyro = "pyrogyro.pyrogyro:appmain"

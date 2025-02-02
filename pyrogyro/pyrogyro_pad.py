@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import pyautogui
+import pydirectinput
 import sdl3
 import vgamepad as vg
 
@@ -148,6 +149,7 @@ class PyroGyroPad:
         self.mkb_state = {}
 
         self.delta_time = 0
+        self.gyro_update = False
         self.last_gyro_time = 0
 
         self.combo_sources = {}
@@ -188,14 +190,14 @@ class PyroGyroPad:
         old_value = self.mkb_state.get(target_enum, False)
         if isinstance(target_enum, MouseButtonTarget) and old_value != target_value:
             if target_value:
-                pyautogui.mouseDown(button=target_enum.value)
+                pydirectinput.mouseDown(button=target_enum.value)
             else:
-                pyautogui.mouseUp(button=target_enum.value)
+                pydirectinput.mouseUp(button=target_enum.value)
         elif isinstance(target_enum, KeyboardKeyTarget) and old_value != target_value:
             if target_value:
-                pyautogui.keyDown(target_enum.value)
+                pydirectinput.keyDown(target_enum.value)
             else:
-                pyautogui.keyUp(target_enum.value)
+                pydirectinput.keyUp(target_enum.value)
         self.mkb_state[target_enum] = target_value
 
     @property
@@ -317,13 +319,14 @@ class PyroGyroPad:
         vel_x = x + extra_x
         vel_y = y + extra_y
         current_x, current_y = pyautogui.position()
-        pyautogui.moveTo(current_x - int(vel_x), current_y - int(vel_y))
+        pydirectinput.move(-int(vel_x), -int(vel_y), relative=True)
         return vel_x % 1, vel_y % 1
 
     def on_poll_start(self):
         self.gyro_vec.set_value(0, 0, 0)
         self.accel_vec.set_value(0, 0, 0)
         self.delta_time = 0.0
+        self.gyro_update = False
 
     def handle_event(self, sdl_event):
         gyro_raw = Vec3()
@@ -367,10 +370,12 @@ class PyroGyroPad:
                 sensor_type = sensor_event.sensor
                 timestamp = sensor_event.sensor_timestamp
                 if sensor_type == sdl3.SDL_SENSOR_GYRO:
+                    self.gyro_update = True
                     gyro_raw.set_value(*sensor_event.data)
                     if self.last_gyro_time == None:
                         self.last_gyro_time = timestamp
                     self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
+                    self.last_gyro_time = timestamp
                 if sensor_type == sdl3.SDL_SENSOR_ACCEL:
                     accel.set_value(*sensor_event.data)
                 self.gyro_vec += gyro_raw
@@ -397,14 +402,15 @@ class PyroGyroPad:
             int(color.z * 255),
         )
         sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
-        self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
-        sensor_fusion_gravity(
-            self.gravity, self.gyro_vec, self.accel_vec, self.delta_time
-        )
-        camera_vel = self.mapping.gyro.mode.gyro_camera(
-            self.gyro_vec, self.gravity.normalized(), self.delta_time
-        )
-        self.input_store.put_input(GyroSource.GYRO, camera_vel)
+        if self.gyro_update:
+            self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
+            sensor_fusion_gravity(
+                self.gravity, self.gyro_vec, self.accel_vec, self.delta_time
+            )
+            camera_vel = self.mapping.gyro.mode.gyro_camera(
+                self.gyro_vec, self.gravity.normalized(), self.delta_time
+            )
+            self.input_store.put_input(GyroSource.GYRO, camera_vel)
         self.send_changed_input_values()
         self.vpad.update()
         self.last_timestamp = time_now

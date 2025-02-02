@@ -2,6 +2,12 @@ import math
 from dataclasses import dataclass
 
 
+def lerp(start, end, progress):
+    delta = clamp(progress, 1.0, 0.0)
+    deltnt = 1.0 - delta
+    return start * deltnt + end * delta
+
+
 def clamp(input, max_val, min_val):
     return max(min(input, max_val), min_val)
 
@@ -41,6 +47,9 @@ class Vec2:
             self.x = self.x + other
             self.y = self.y + other
         return self
+
+    def angle(self):
+        return (math.atan2(self.x, self.y) * RADIANS_TO_DEGREES) + 180.0
 
 
 @dataclass

@@ -21,7 +21,12 @@ mapping:
   GUIDE: X_GUIDE
   L2: X_L2
   R2: X_R2
-  LSTICK: X_LSTICK
+  LSTICK: 
+    as: DPAD
+    UP: W
+    LEFT: A
+    DOWN: S
+    RIGHT: D
   RSTICK: X_RSTICK
 gyro:
   mode: 

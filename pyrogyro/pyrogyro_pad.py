@@ -286,9 +286,13 @@ class PyroGyroPad:
             case pyrogyro.io_types.MouseTarget:
                 if isinstance(source_value, Vec2):
                     if source == GyroSource.GYRO:
-                        self.move_mouse(
-                            source_value.x,
-                            source_value.y,
+                        self.leftover_vel.set_value(
+                            *self.move_mouse(
+                                source_value.x,
+                                source_value.y,
+                                extra_x=self.leftover_vel.x,
+                                extra_y=self.leftover_vel.y,
+                            )
                         )
                     else:
                         self.move_mouse(
@@ -320,7 +324,9 @@ class PyroGyroPad:
         vel_y = y + extra_y
         current_x, current_y = pyautogui.position()
         pydirectinput.move(-int(vel_x), -int(vel_y), relative=True)
-        return vel_x % 1, vel_y % 1
+        extra_x = vel_x % 1
+        extra_y = vel_y % 1
+        return extra_x, extra_y
 
     def on_poll_start(self):
         self.gyro_vec.set_value(0, 0, 0)
@@ -390,7 +396,18 @@ class PyroGyroPad:
         for source in changed_inputs:
             target = self.mapping.mapping.get(source)
             if target:
-                self.send_value(changed_inputs.get(source), target, source=source)
+                if type(target) in MapDirectTargetTypes:
+                    self.send_value(changed_inputs.get(source), target, source=source)
+                else:
+                    complex_output_dict = target.map_to_outputs(
+                        changed_inputs.get(source)
+                    )
+                    for mapped_output_key in complex_output_dict:
+                        self.send_value(
+                            complex_output_dict[mapped_output_key],
+                            mapped_output_key,
+                            source=source,
+                        )
 
     def update(self, time_now: float):
         if not self.last_timestamp:

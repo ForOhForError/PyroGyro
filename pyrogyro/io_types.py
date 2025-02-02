@@ -1,12 +1,15 @@
 import collections.abc
 import enum
 import logging
+import types
 import typing
 
 import sdl3
 from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
 from pydantic import BaseModel, BeforeValidator, PlainSerializer
 from vgamepad import DS4_BUTTONS, XUSB_BUTTON
+
+from pyrogyro.math import *
 
 EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
@@ -159,6 +162,15 @@ MapDirectTarget = typing.Union[
     enum_or_by_name(MouseTarget),
     None,
 ]
+MapDirectTargetTypes = (
+    KeyboardKeyTarget,
+    ButtonTarget,
+    SingleAxisTarget,
+    DoubleAxisTarget,
+    MouseButtonTarget,
+    MouseTarget,
+    types.NoneType,
+)
 
 
 class MapComplexTarget(BaseModel):
@@ -169,7 +181,37 @@ class MapComplexTarget(BaseModel):
         return hash((self.output, self.on))
 
 
-MapTarget = typing.Union[MapDirectTarget, MapComplexTarget]
+class AsDpad(BaseModel):
+    map_as: typing.Literal["DPAD"] = "DPAD"
+    UP: typing.Optional["MapTarget"] = None
+    RIGHT: typing.Optional["MapTarget"] = None
+    DOWN: typing.Optional["MapTarget"] = None
+    LEFT: typing.Optional["MapTarget"] = None
+
+    def map_to_outputs(self, input_value):
+        outputs = {}
+        if isinstance(input_value, Vec2):
+            length = input_value.length()
+            if length > 0.1:
+                angle = input_value.angle()
+                if self.UP:
+                    outputs[self.UP] = (angle >= 310 and angle <= 360) or (
+                        angle >= 0 and angle <= 50
+                    )
+                if self.LEFT:
+                    outputs[self.LEFT] = angle >= 40 and angle <= 140
+                if self.DOWN:
+                    outputs[self.DOWN] = angle >= 130 and angle <= 230
+                if self.RIGHT:
+                    outputs[self.RIGHT] = angle >= 220 and angle <= 320
+            else:
+                for out in (self.UP, self.RIGHT, self.DOWN, self.LEFT):
+                    if out:
+                        outputs[out] = False
+        return outputs
+
+
+MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad]
 MapSource = typing.Union[MapDirectSource, typing.Sequence[MapDirectSource]]
 
 

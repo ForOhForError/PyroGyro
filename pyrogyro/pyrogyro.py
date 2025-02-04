@@ -308,9 +308,12 @@ class PyroGyroMapper:
         self.start_console_input_thread()
         sdl3.SDL_SetEventFilter(event_filter, None)
 
+        if self.window_listener:
+            self.window_listener.process_current_window()
         self.refresh_autoload_mappings()
 
         try:
+            sdl3.SDL_Delay(1000)
             self.input_poll()
         except KeyboardInterrupt:
             pass

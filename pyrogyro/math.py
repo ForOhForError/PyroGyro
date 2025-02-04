@@ -48,6 +48,13 @@ class Vec2:
             self.y = self.y + other
         return self
 
+    def __itruediv__(self, other):
+        self.x, self.y = self.x / other, self.y / other
+        return self
+
+    def __truediv__(self, other):
+        return Vec2(self.x / other, self.y / other)
+
     def angle(self):
         return (math.atan2(self.x, self.y) * RADIANS_TO_DEGREES) + 180.0
 

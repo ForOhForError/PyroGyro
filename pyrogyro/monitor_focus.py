@@ -60,8 +60,19 @@ GetWindowThreadProcessId = ctypes.windll.user32.GetWindowThreadProcessId
 IsWindowVisible = ctypes.windll.user32.IsWindowVisible
 SetTimer = ctypes.windll.user32.SetTimer
 KillTimer = ctypes.windll.user32.KillTimer
+GetForegroundWindow = ctypes.windll.user32.GetForegroundWindow
 
 import logging
+
+
+def _hwnd_to_names(hwnd):
+    length = GetWindowTextLength(hwnd)
+    namebuff = ctypes.create_unicode_buffer(length + 1)
+    GetWindowText(hwnd, namebuff, length + 1)
+    pid = ctypes.wintypes.LPDWORD(ctypes.c_ulong(0))
+    GetWindowThreadProcessId(hwnd, pid)
+    proc = psutil.Process(pid.contents.value)
+    return proc.name(), namebuff.value
 
 
 class WindowChangeEventListener(object):
@@ -72,8 +83,8 @@ class WindowChangeEventListener(object):
     def __init__(self, callback=None):
         self.running = False
         self.hook = 0
-        self.focus_exe_name = "pyrogyro.exe"
-        self.focus_window_title = "PyroGyro Console"
+        self.focus_exe_name = ""
+        self.focus_window_title = ""
         if callback:
             self.callback = callback
         else:
@@ -82,19 +93,18 @@ class WindowChangeEventListener(object):
     def default_callback(self, proc_name, window_name):
         logging.debug(f"{proc_name}, {window_name}")
 
+    def process_current_window(self):
+        hwnd = GetForegroundWindow()
+        self.focus_exe_name, self.focus_window_title = _hwnd_to_names(hwnd)
+        self.callback(self.focus_exe_name, self.focus_window_title)
+
     def listen(self, handle_event=None):
         ole32.CoInitialize(0)
 
         def win_callback(
             hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime
         ):
-            length = GetWindowTextLength(hwnd)
-            namebuff = ctypes.create_unicode_buffer(length + 1)
-            GetWindowText(hwnd, namebuff, length + 1)
-            pid = ctypes.wintypes.LPDWORD(ctypes.c_ulong(0))
-            GetWindowThreadProcessId(hwnd, pid)
-            proc = psutil.Process(pid.contents.value)
-            self.focus_exe_name, self.focus_window_title = proc.name(), namebuff.value
+            self.focus_exe_name, self.focus_window_title = _hwnd_to_names(hwnd)
             self.callback(self.focus_exe_name, self.focus_window_title)
 
         WinEventProc = WinEventProcType(win_callback)

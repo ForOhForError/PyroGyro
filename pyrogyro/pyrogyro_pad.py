@@ -252,7 +252,6 @@ class PyroGyroPad:
         self.gyro_calibrating = calibrating
         if calibrating:
             self.gyro_calibration.reset()
-            self.gyro_calibrating = calibrating
 
     def send_value(self, source_value, target_enum, source=None):
         match type(target_enum):
@@ -286,14 +285,13 @@ class PyroGyroPad:
             case pyrogyro.io_types.MouseTarget:
                 if isinstance(source_value, Vec2):
                     if source == GyroSource.GYRO:
-                        self.leftover_vel.set_value(
-                            *self.move_mouse(
-                                source_value.x,
-                                source_value.y,
-                                extra_x=self.leftover_vel.x,
-                                extra_y=self.leftover_vel.y,
-                            )
+                        extra_x, extra_y = self.move_mouse(
+                            source_value.x,
+                            source_value.y,
+                            extra_x=self.leftover_vel.x,
+                            extra_y=self.leftover_vel.y,
                         )
+                        self.leftover_vel.set_value(extra_x, extra_y)
                     else:
                         self.move_mouse(
                             source_value.x * -3,
@@ -316,17 +314,15 @@ class PyroGyroPad:
         self,
         x: float,
         y: float,
-        calib_mult: float = 1.0,
         extra_x: float = 0.0,
         extra_y: float = 0.0,
     ):
         vel_x = x + extra_x
         vel_y = y + extra_y
-        current_x, current_y = pyautogui.position()
         pydirectinput.move(-int(vel_x), -int(vel_y), relative=True)
-        extra_x = vel_x % 1
-        extra_y = vel_y % 1
-        return extra_x, extra_y
+        leftover_x = vel_x % sign(vel_x)
+        leftover_y = vel_y % sign(vel_y)
+        return leftover_x, leftover_y
 
     def on_poll_start(self):
         self.gyro_vec.set_value(0, 0, 0)
@@ -386,10 +382,12 @@ class PyroGyroPad:
                     self.last_gyro_time = timestamp
                 if sensor_type == sdl3.SDL_SENSOR_ACCEL:
                     accel.set_value(*sensor_event.data)
-                self.gyro_vec += gyro_raw
-                self.accel_vec += accel
                 if self.gyro_calibrating:
                     self.gyro_calibration.update(gyro_raw)
+                    self.gyro_update = False
+                else:
+                    self.gyro_vec += gyro_raw
+                    self.accel_vec += accel
 
     def send_changed_input_values(self):
         changed_inputs = self.input_store.get_inputs()

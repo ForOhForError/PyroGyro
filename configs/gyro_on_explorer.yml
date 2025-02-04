@@ -11,4 +11,10 @@ mapping:
 gyro:
   mode: 
     gyro_mode: PLAYER_TURN
-    gyro_sens: 1
+    gyro_sens: 3
+    fast_sens: [5, 4]
+    slow_threshold: 5
+    fast_threshold: 75
+    smooth_window: 3
+    smooth_threshold: 5
+    tightening_theshold: 5

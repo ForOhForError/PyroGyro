@@ -7,6 +7,7 @@ import enum
 import math
 import typing
 from dataclasses import dataclass, field
+from queue import deque
 
 from pyrogyro.io_types import enum_or_by_name
 from pyrogyro.math import *
@@ -168,6 +169,44 @@ class GyroConfig:
     fast_threshold: float = 0.0
     real_world_sens: float = 5.33333
     in_game_sens: float = 1.0
+    smooth_window: typing.Optional[int] = None
+    smooth_threshold: typing.Optional[float] = None
+    tightening_theshold: typing.Optional[float] = None
+
+    def __post_init__(self):
+        self._smooth_buffer = deque()
+
+    def get_smoothed_gyro(self, sample: Vec2):
+        self._smooth_buffer.append(sample)
+        if len(self._smooth_buffer) > self.smooth_window:
+            self._smooth_buffer.popleft()
+        smoothed = Vec2()
+        for entry in self._smooth_buffer:
+            smoothed += entry
+        smoothed /= len(self._smooth_buffer)
+        return smoothed
+
+    def get_tiered_smoothed_gyro(
+        self, sample: Vec2, smooth_thresh: float, delta_seconds: float
+    ):
+        smooth_thresh *= delta_seconds
+        half_thresh = smooth_thresh * 0.5
+        sample_len = sample.length()
+        direct_weight = (sample_len - half_thresh) / (smooth_thresh - half_thresh)
+        direct_weight = clamp(direct_weight, 0.0, 1.0)
+        return (sample * direct_weight) + self.get_smoothed_gyro(
+            sample * (1.0 - direct_weight)
+        )
+
+    def get_tightened_sample(
+        self, sample: Vec2, threshold: float, delta_seconds: float
+    ):
+        threshold *= delta_seconds
+        sample_len = sample.length()
+        if sample_len < threshold:
+            input_scale = sample_len / threshold
+            return sample * input_scale
+        return sample
 
     def get_slow_sens(self):
         if isinstance(self.gyro_sens, float):
@@ -184,13 +223,17 @@ class GyroConfig:
         else:
             return self.get_slow_sens()
 
-    def get_accel_sens(self, gyro: Vec2):
-        speed = gyro.length
+    def get_accel_sens(
+        self, gyro: Vec2, slow_threshold: float, fast_threshold: float, delta_seconds
+    ):
+        slow_threshold *= delta_seconds
+        fast_threshold *= delta_seconds
+        speed = gyro.length()
         slow_sens_x, slow_sens_y = self.get_slow_sens()
         fast_sens_x, fast_sens_y = self.get_fast_sens()
-        thresh_dist = self.fast_threshold - self.slow_threshold
+        thresh_dist = fast_threshold - slow_threshold
         slow_fast_factor = (
-            (speed - self.slow_threshold) / thresh_dist if thresh_dist != 0 else 0
+            (speed - slow_threshold) / thresh_dist if thresh_dist != 0 else 0
         )
         return lerp(slow_sens_x, fast_sens_x, slow_fast_factor), lerp(
             slow_sens_y, fast_sens_y, slow_fast_factor
@@ -214,13 +257,28 @@ class GyroConfig:
                 calibrated_gyro = gyro_camera_player_lean(
                     gyro, grav_norm, delta_seconds
                 )
-        gyro_sens_x, gyro_sens_y = self.get_accel_sens(calibrated_gyro)
+        if self.smooth_window:
+            if self.smooth_threshold:
+                calibrated_gyro = self.get_tiered_smoothed_gyro(
+                    calibrated_gyro, self.smooth_threshold, delta_seconds
+                )
+            else:
+                calibrated_gyro = self.get_smoothed_gyro(calibrated_gyro)
+
+        if self.tightening_theshold:
+            calibrated_gyro = self.get_tightened_sample(
+                calibrated_gyro, self.tightening_theshold, delta_seconds
+            )
+
+        gyro_sens_x, gyro_sens_y = self.get_accel_sens(
+            calibrated_gyro, self.slow_threshold, self.fast_threshold, delta_seconds
+        )
         calibrated_gyro.x *= gyro_sens_x
         calibrated_gyro.y *= gyro_sens_y
         return calibrated_gyro
 
     def gyro_pixels(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
-        os_mouse_speed = 1
+        os_mouse_speed = 1.0
         mouse_calib = self.real_world_sens / os_mouse_speed / self.in_game_sens
         camera_vec = self.gyro_camera(gyro, grav_norm, delta_seconds)
         camera_vec *= mouse_calib

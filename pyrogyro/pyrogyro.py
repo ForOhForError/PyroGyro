@@ -225,9 +225,7 @@ class PyroGyroMapper:
 
     @classmethod
     def init_sdl(cls):
-        sdl3.SDL_SetHint(
-            sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS.encode(), "1".encode()
-        )
+        sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1".encode())
         sdl_init_flags = (
             sdl3.SDL_INIT_GAMEPAD | sdl3.SDL_INIT_HAPTIC | sdl3.SDL_INIT_SENSOR
         )

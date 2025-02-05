@@ -1371,13 +1371,13 @@ Pillow = {version = ">=9.3.0", markers = "python_version == \"3.11\""}
 
 [[package]]
 name = "pysdl3"
-version = "0.9.3b0"
+version = "0.9.3b2"
 description = "A pure Python wrapper for SDL3."
 optional = false
 python-versions = "*"
 files = [
-    {file = "PySDL3-0.9.3b0-py3-none-any.whl", hash = "sha256:b1b37dbddfcb31c5910e76fb99d313835d9c71c65920e57b8211fd2d2bad260a"},
-    {file = "pysdl3-0.9.3b0.tar.gz", hash = "sha256:0509b416666450b634a920a98a76795a499dd66fdc127cf5456a556141f0a7f5"},
+    {file = "PySDL3-0.9.3b2-py3-none-any.whl", hash = "sha256:3ef341317191c4746fb2f143d666efd3a2ebefdd0adf87a843845308860e4a06"},
+    {file = "pysdl3-0.9.3b2.tar.gz", hash = "sha256:c720f1561f456960dd9572205eba07ea35aa0689b1c825ea7e9bbe9655713793"},
 ]
 
 [package.dependencies]

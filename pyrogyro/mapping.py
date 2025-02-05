@@ -59,28 +59,33 @@ _BasicMappingOrListOfMappings = typing.Union[
 ]
 
 
-class Mapping(BaseModel):
-    name: str = "Empty Mapping"
-    autoload: typing.Optional[AutoloadConfig] = None
+class Layer(BaseModel):
     mapping: _BasicMappingOrListOfMappings = Field(default_factory=CommentedMap)
     gyro: GyroMapping = Field(default_factory=GyroMapping)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._loaded_yml_map = None
         self._combo_map = {}
+        self._active_mapping = {}
+        self._stale = True
 
     @property
     def map(self):
-        if isinstance(self.mapping, typing.Sequence):
-            return {}
-        else:
-            return self.mapping
+        self.refresh_active_mapping()
+        return self._active_mapping
 
-    def count_autoload_specificity(self):
-        if self.autoload:
-            return self.autoload.count_specificity()
-        return 0
+    def refresh_active_mapping(self):
+        if self._stale:
+            self._active_mapping.clear()
+            if isinstance(self.mapping, typing.Sequence):
+                for entry in self.mapping:
+                    if isinstance(entry, DetailedMapping):
+                        pass
+                    else:
+                        self._active_mapping.update(entry)
+            else:
+                self._active_mapping.update(self.mapping)
+            self._stale = False
 
     def add_mapping(self, source: MapSource, button_out: MapTarget):
         self.map[source] = MapTarget
@@ -99,13 +104,59 @@ class Mapping(BaseModel):
                 return True
         return False
 
+
+_MAPPING_FIELD_ORDER = ("name", "autoload", "mapping", "gyro", "layers")
+
+
+class Mapping(Layer):
+    name: str = "Default Mapping"
+    autoload: typing.Optional[AutoloadConfig] = None
+    layers: collections.abc.Mapping[str, Layer] = Field(default_factory=CommentedMap)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._loaded_yml_map = None
+        self._active_layers = set()
+
+    @property
+    def map(self):
+        self.refresh_active_mapping()
+        return self._active_mapping
+
+    def refresh_active_mapping(self):
+        if self._stale:
+            self._active_mapping.clear()
+            if isinstance(self.mapping, typing.Sequence):
+                for entry in self.mapping:
+                    if isinstance(entry, DetailedMapping):
+                        pass
+                    else:
+                        self._active_mapping.update(entry)
+            else:
+                self._active_mapping.update(self.mapping)
+            for layer in self.layers:
+                if layer in self._active_layers:
+                    self._active_mapping.update(self.layers[layer].map())
+            self._stale = False
+
+    def count_autoload_specificity(self):
+        if self.autoload:
+            return self.autoload.count_specificity()
+        return 0
+
     def save_to_file(self, file_handle=sys.stdout):
-        obj_out = self.model_dump(exclude_none=True, exclude_unset=True)
+        obj_out_direct = self.model_dump(exclude_none=True, exclude_unset=True)
+        obj_out_sorted = {}
+        for key in _MAPPING_FIELD_ORDER:
+            if key in obj_out_direct:
+                obj_out_sorted[key] = obj_out_direct.pop(key)
+        for key in obj_out_direct:
+            obj_out_sorted[key] = obj_out_direct.get(key)
         if self._loaded_yml_map:
-            commented_out = CommentedMap(obj_out)
+            commented_out = CommentedMap(obj_out_sorted)
             commented_out = commented_out.copy_attributes(self._loaded_yml_map)
-            obj_out = commented_out
-        yaml.dump(obj_out, file_handle)
+            obj_out_sorted = commented_out
+        yaml.dump(obj_out_sorted, file_handle)
 
     @classmethod
     def load_from_file(cls, file_handle=sys.stdin):

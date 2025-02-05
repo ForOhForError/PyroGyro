@@ -392,7 +392,7 @@ class PyroGyroPad:
     def send_changed_input_values(self):
         changed_inputs = self.input_store.get_inputs()
         for source in changed_inputs:
-            target = self.mapping.mapping.get(source)
+            target = self.mapping.map.get(source)
             if target:
                 if type(target) in MapDirectTargetTypes:
                     self.send_value(changed_inputs.get(source), target, source=source)

@@ -23,6 +23,8 @@ import pydirectinput
 import sdl3
 import vgamepad as vg
 from infi.systray import SysTrayIcon
+from pydantic import ValidationError
+from ruamel.yaml.scanner import ScannerError
 
 import pyrogyro.io_types
 from pyrogyro.constants import (
@@ -105,15 +107,39 @@ class PyroGyroMapper:
                 or self.autoload_configs[config_path][1] != mod_time
             ):
                 with open(config_path) as config_handle:
-                    mapping: Mapping = Mapping.load_from_file(file_handle=config_path)
-                    if mapping.autoload != None:
-                        self.logger.debug(
-                            f"Pushed autoload mapping for file {config_path}"
+                    try:
+                        mapping: Mapping = Mapping.load_from_file(
+                            file_handle=config_path
                         )
-                        self.autoload_configs[config_path] = (
-                            mapping,
-                            os.path.getmtime(config_path),
+                        if mapping.autoload != None:
+                            self.logger.debug(
+                                f"Pushed autoload mapping for file {config_path}"
+                            )
+                            self.autoload_configs[config_path] = (
+                                mapping,
+                                os.path.getmtime(config_path),
+                            )
+                    except ValidationError as validation_error:
+                        self.logger.info(
+                            f"Error loading config {config_path}; skipping"
                         )
+                        self.logger.debug(f"== VALIDATION ERRORS ==")
+                        err_count = 1
+                        for error in validation_error.errors():
+                            self.logger.debug(
+                                f"{err_count}: {error.get('type')} AT {error.get('loc')}: {error.get('msg')}"
+                            )
+                            err_count += 1
+                    except ScannerError as scanner_error:
+                        self.logger.info(
+                            f"Error parsing config {config_path}; skipping"
+                        )
+                        self.logger.debug(f"{scanner_error}")
+                    except Exception as other_error:
+                        self.logger.info(
+                            f"Unknown error loading config {config_path}; skipping"
+                        )
+                        self.logger.debug(f"{type(other_error)}: {other_error}")
         to_remove = []
         for config_path in self.autoload_configs:
             if config_path not in config_path_list:

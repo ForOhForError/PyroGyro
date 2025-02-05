@@ -8,6 +8,7 @@ from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 from pyrogyro.gamepad_motion import GyroConfig, GyroMode
 from pyrogyro.io_types import (
     ButtonTarget,
+    DetailedMapping,
     DoubleAxisSource,
     DoubleAxisTarget,
     MapComplexTarget,
@@ -52,16 +53,29 @@ class AutoloadConfig(BaseModel):
         )
 
 
+_BasicMapping = collections.abc.Mapping[MapSource, MapTarget]
+_BasicMappingOrListOfMappings = typing.Union[
+    _BasicMapping, typing.Sequence[typing.Union[DetailedMapping, _BasicMapping]]
+]
+
+
 class Mapping(BaseModel):
     name: str = "Empty Mapping"
     autoload: typing.Optional[AutoloadConfig] = None
-    mapping: collections.abc.Mapping[MapSource, MapTarget] = CommentedMap()
-    gyro: GyroMapping = GyroMapping()
+    mapping: _BasicMappingOrListOfMappings = Field(default_factory=CommentedMap)
+    gyro: GyroMapping = Field(default_factory=GyroMapping)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._loaded_yml_map = None
         self._combo_map = {}
+
+    @property
+    def map(self):
+        if isinstance(self.mapping, typing.Sequence):
+            return {}
+        else:
+            return self.mapping
 
     def count_autoload_specificity(self):
         if self.autoload:
@@ -69,14 +83,14 @@ class Mapping(BaseModel):
         return 0
 
     def add_mapping(self, source: MapSource, button_out: MapTarget):
-        self.mapping[source] = MapTarget
+        self.map[source] = MapTarget
         self._update_combo_mappings()
 
     def _update_combo_mappings(self):
         combo_map = {}
-        for key in self.mapping.keys():
+        for key in self.map.keys():
             if isinstance(key, typing.Sequence):
-                combo_map[key] = self.mapping[key]
+                combo_map[key] = self.map[key]
         self._combo_map = combo_map
 
     def _valid_for_combo(self, source: MapSource) -> bool:

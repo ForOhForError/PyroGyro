@@ -21,14 +21,5 @@ mapping:
   GUIDE: X_GUIDE
   L2: X_L2
   R2: X_R2
-  LSTICK: 
-    as: DPAD
-    UP: W
-    LEFT: A
-    DOWN: S
-    RIGHT: D
+  LSTICK: X_LSTICK
   RSTICK: X_RSTICK
-gyro:
-  mode: 
-    gyro_mode: PLAYER_TURN
-    gyro_sens: 3

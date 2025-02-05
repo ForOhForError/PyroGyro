@@ -212,7 +212,13 @@ class AsDpad(BaseModel):
 
 
 MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad]
-MapSource = typing.Union[MapDirectSource, typing.Sequence[MapDirectSource]]
+MapSource = MapDirectSource
+
+
+class DetailedMapping(BaseModel):
+    i: MapSource
+    o: MapTarget
+    on: str
 
 
 def to_float(in_val):

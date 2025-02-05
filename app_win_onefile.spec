@@ -30,7 +30,7 @@ path_vigem_client = Path(vgamepad.__file__).parent.absolute() / "win" / "vigem" 
 path_sdl = Path(sdl3.__file__).parent.absolute() / "bin"
 
 a = Analysis(
-    ['pyrogyro\\pyrogyro.py'],
+    ['pyrogyro/pyrogyro.py'],
     pathex=[Path(sdl3.__file__).parent.absolute()],
     binaries=[
         (path_vigem_client, '.'),
@@ -39,26 +39,32 @@ a = Analysis(
     datas=[
         ('res/*', 'res'),
     ],
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['pyrogyro/win_runtime_hook.py'],
     excludes=['pyrogyro/project_util.py'],
     noarchive=False,
     optimize=0,
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher
 )
 pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='pyrogyro',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -67,13 +73,4 @@ exe = EXE(
     entitlements_file=None,
     clean=True,
     icon='res/pyrogyro2.ico',
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='pyrogyro',
-)
+    )

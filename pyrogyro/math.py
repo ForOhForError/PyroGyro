@@ -33,6 +33,19 @@ class Vec2:
     def length(self):
         return math.sqrt(self.x**2 + self.y**2)
 
+    @classmethod
+    def lerp(cls, start: "Vec2", end: "Vec2", delta: float):
+        return cls().set_lerp(start, end, delta)
+
+    def set_lerp(self, start: "Vec2", end: "Vec2", delta: float):
+        delta = clamp(delta, 1.0, 0.0)
+        deltnt = 1.0 - delta
+        self.x, self.y = (
+            start.x * deltnt + end.x * delta,
+            start.y * deltnt + end.y * delta,
+        )
+        return self
+
     def __add__(self, other):
         if isinstance(other, Vec2):
             return Vec2(self.x + other.x, self.y + other.y)
@@ -57,6 +70,16 @@ class Vec2:
 
     def angle(self):
         return (math.atan2(self.x, self.y) * RADIANS_TO_DEGREES) + 180.0
+
+    def normalized(self):
+        return Vec2(self.x, self.y).normalize()
+
+    def normalize(self):
+        current_len = self.length()
+        if current_len != 0:
+            self.x = self.x / current_len
+            self.y = self.y / current_len
+        return self
 
 
 @dataclass

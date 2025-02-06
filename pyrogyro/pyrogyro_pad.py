@@ -298,18 +298,6 @@ class PyroGyroPad:
                             source_value.y * -3,
                         )
 
-    def mouse_calib_mult(
-        self,
-        real_world_sens: float = 1.0,
-        os_mouse_speed: float = 1.0,
-        in_game_sens: float = 1.0,
-    ):
-        if os_mouse_speed == 0:
-            return 0
-        if in_game_sens == 0:
-            return 0
-        return real_world_sens / os_mouse_speed / in_game_sens
-
     def move_mouse(
         self,
         x: float,
@@ -389,7 +377,7 @@ class PyroGyroPad:
                     self.gyro_vec += gyro_raw
                     self.accel_vec += accel
 
-    def send_changed_input_values(self):
+    def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
         for source in changed_inputs:
             target = self.mapping.map.get(source)
@@ -398,7 +386,10 @@ class PyroGyroPad:
                     self.send_value(changed_inputs.get(source), target, source=source)
                 else:
                     complex_output_dict = target.map_to_outputs(
-                        changed_inputs.get(source)
+                        changed_inputs.get(source),
+                        delta_time=delta_time,
+                        real_world_calibration=self.mapping.get_real_world_calibration(),
+                        in_game_sens=self.mapping.get_in_game_sens(),
                     )
                     for mapped_output_key in complex_output_dict:
                         self.send_value(
@@ -425,9 +416,13 @@ class PyroGyroPad:
                 self.gravity, self.gyro_vec, self.accel_vec, self.delta_time
             )
             pixel_vel = self.mapping.gyro.mode.gyro_pixels(
-                self.gyro_vec, self.gravity.normalized(), self.delta_time
+                self.gyro_vec,
+                self.gravity.normalized(),
+                self.delta_time,
+                real_world_calibration=self.mapping.get_real_world_calibration(),
+                in_game_sens=self.mapping.get_in_game_sens(),
             )
             self.input_store.put_input(GyroSource.GYRO, pixel_vel)
-        self.send_changed_input_values()
+        self.send_changed_input_values(delta_time=delta_time)
         self.vpad.update()
         self.last_timestamp = time_now

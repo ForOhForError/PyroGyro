@@ -181,14 +181,102 @@ class MapComplexTarget(BaseModel):
         return hash((self.output, self.on))
 
 
+ZERO_VEC2 = Vec2()
+
+
+class AsAim(BaseModel):
+    map_as: typing.Literal["AIM"]
+    o: "MapTarget"
+    sens: typing.Union[float, typing.Tuple[float, float]] = 360.0
+    power: float = 1.0
+    invert_x: bool = False
+    invert_y: bool = False
+    accel_rate: float = 0.0
+    accel_cap: float = 1000000.0
+    deadzone_outer: float = 0.1
+    deadzone_inner: float = 0.1
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._accel_mult = 1.0
+        self._output_vec = Vec2()
+        self._max_output_thresh = 1.0 - self.deadzone_outer
+
+    def _interp_input(self, input_vec: Vec2):
+        magnitude = (
+            input_vec.length() / self._max_output_thresh
+            if self._max_output_thresh != 0
+            else 1.0
+        )
+        progress = magnitude**self.power
+        return Vec2.lerp(ZERO_VEC2, input_vec.normalized(), progress)
+
+    @property
+    def sens_vec(self):
+        if isinstance(self.sens, float):
+            return Vec2(self.sens, self.sens)
+        else:
+            return Vec2(*self.sens)
+
+    def get_velocity_vec(
+        self,
+        input_value,
+        delta_time,
+        real_world_calibration=1.0,
+        in_game_sens=1.0,
+        os_mouse_speed=1.0,
+    ):
+        vel_vec = (
+            self.sens_vec
+            * min(self._accel_mult, self.accel_cap)
+            * (real_world_calibration / os_mouse_speed / in_game_sens)
+            * delta_time
+        )
+        input_value = self._interp_input(input_value)
+        vel_vec.set_value(
+            vel_vec.x * input_value.x * (-1 if self.invert_x else 1),
+            vel_vec.y * input_value.y * (-1 if self.invert_y else 1),
+        )
+        return vel_vec
+
+    def map_to_outputs(
+        self,
+        input_value,
+        delta_time=0.0,
+        real_world_calibration=1.0,
+        in_game_sens=1.0,
+        os_mouse_speed=1.0,
+    ):
+        if isinstance(input_value, Vec2):
+            magnitude = input_value.length()
+            full_tilt = magnitude >= self._max_output_thresh
+            if not full_tilt:
+                self._accel_mult = 1.0
+            if magnitude >= self.deadzone_inner:
+                final_vec = self.get_velocity_vec(
+                    input_value,
+                    delta_time,
+                    real_world_calibration=real_world_calibration,
+                    in_game_sens=in_game_sens,
+                    os_mouse_speed=os_mouse_speed,
+                )
+                if full_tilt:
+                    self._accel_mult = min(
+                        self._accel_mult + (delta_time * self.accel_rate),
+                        self.accel_cap,
+                    )
+                return {self.o: final_vec}
+        return {self.o: ZERO_VEC2}
+
+
 class AsDpad(BaseModel):
-    map_as: typing.Literal["DPAD"] = "DPAD"
+    map_as: typing.Literal["DPAD"]
     UP: typing.Optional["MapTarget"] = None
     RIGHT: typing.Optional["MapTarget"] = None
     DOWN: typing.Optional["MapTarget"] = None
     LEFT: typing.Optional["MapTarget"] = None
 
-    def map_to_outputs(self, input_value):
+    def map_to_outputs(self, input_value, delta_time=0.0):
         outputs = {}
         if isinstance(input_value, Vec2):
             length = input_value.length()
@@ -211,7 +299,7 @@ class AsDpad(BaseModel):
         return outputs
 
 
-MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad]
+MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad, AsAim]
 MapSource = MapDirectSource
 
 

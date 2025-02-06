@@ -75,6 +75,7 @@ class Layer(BaseModel):
         return self._active_mapping
 
     def refresh_active_mapping(self):
+        # these probably need to be deep updates
         if self._stale:
             self._active_mapping.clear()
             if isinstance(self.mapping, typing.Sequence):
@@ -105,13 +106,31 @@ class Layer(BaseModel):
         return False
 
 
-_MAPPING_FIELD_ORDER = ("name", "autoload", "mapping", "gyro", "layers")
+_MAPPING_FIELD_ORDER = (
+    "name",
+    "autoload",
+    "real_world_calibration",
+    "in_game_sens",
+    "mapping",
+    "gyro",
+    "layers",
+)
 
 
 class Mapping(Layer):
     name: str = "Default Mapping"
     autoload: typing.Optional[AutoloadConfig] = None
     layers: collections.abc.Mapping[str, Layer] = Field(default_factory=CommentedMap)
+    real_world_calibration: typing.Optional[float] = None
+    in_game_sens: typing.Optional[float] = None
+
+    def get_in_game_sens(self):
+        return self.in_game_sens if self.in_game_sens else 1.0
+
+    def get_real_world_calibration(self):
+        return (
+            self.real_world_calibration if self.real_world_calibration else (16.0 / 3)
+        )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -166,7 +185,7 @@ class Mapping(Layer):
         return constructed_mapping
 
 
-def get_default_mapping():
+def get_default_xbox_mapping():
     return Mapping(
         name="Default Xbox Controller",
         autoload=AutoloadConfig.get_match_all(),
@@ -197,6 +216,6 @@ def get_default_mapping():
 
 
 def generate_default_mapping_files():
-    xbox_config = get_default_mapping()
+    xbox_config = get_default_xbox_mapping()
     with open("configs/default_xbox.yml", "w") as xbox_config_file:
         xbox_config.save_to_file(xbox_config_file)

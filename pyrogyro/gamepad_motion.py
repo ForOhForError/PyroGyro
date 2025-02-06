@@ -167,8 +167,6 @@ class GyroConfig:
     fast_sens: typing.Optional[float | typing.Tuple[float, float]] = None
     slow_threshold: float = 0.0
     fast_threshold: float = 0.0
-    real_world_sens: float = 5.33333
-    in_game_sens: float = 1.0
     smooth_window: typing.Optional[int] = None
     smooth_threshold: typing.Optional[float] = None
     tightening_theshold: typing.Optional[float] = None
@@ -277,9 +275,16 @@ class GyroConfig:
         calibrated_gyro.y *= gyro_sens_y
         return calibrated_gyro
 
-    def gyro_pixels(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
+    def gyro_pixels(
+        self,
+        gyro: Vec3,
+        grav_norm: Vec3,
+        delta_seconds: float = 0.0,
+        real_world_calibration: float = 1.0,
+        in_game_sens: float = 1.0,
+    ):
         os_mouse_speed = 1.0
-        mouse_calib = self.real_world_sens / os_mouse_speed / self.in_game_sens
+        mouse_calib = real_world_calibration / os_mouse_speed / in_game_sens
         camera_vec = self.gyro_camera(gyro, grav_norm, delta_seconds)
         camera_vec *= mouse_calib
         return camera_vec

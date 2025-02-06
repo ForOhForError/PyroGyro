@@ -6,7 +6,9 @@ autoload:
 mapping:
   L2: RMOUSE
   R2: LMOUSE
-  RSTICK: MOUSE
+  RSTICK: 
+    map_as: AIM
+    o: MOUSE
   GYRO: MOUSE
 gyro:
   mode: 

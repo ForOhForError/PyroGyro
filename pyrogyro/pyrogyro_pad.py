@@ -24,6 +24,7 @@ from pyrogyro.gamepad_motion import (
 from pyrogyro.io_types import *
 from pyrogyro.mapping import AutoloadConfig, Mapping
 from pyrogyro.math import *
+from pyrogyro.web import WebServer
 
 ROYGBIV = (
     Vec3(x=0, y=1, z=1),
@@ -121,11 +122,17 @@ class LerpableLED:
 
 
 class PyroGyroPad:
-    def __init__(self, sdl_joystick, mapping: Mapping | None = None):
+    def __init__(
+        self,
+        sdl_joystick,
+        mapping: Mapping | None = None,
+        web_server: WebServer | None = None,
+    ):
         self.logger = logging.getLogger("PyroGyroPad")
         if not mapping:
             mapping = Mapping()
         self.mapping = mapping
+        self.web_server = web_server
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
         self.vpad.register_notification(callback_function=self.virtual_pad_callback)
@@ -318,6 +325,26 @@ class PyroGyroPad:
         self.delta_time = 0.0
         self.gyro_update = False
 
+    def send_to_web_server(self, event, value):
+        remap = {"l3": "lstick", "r3": "rstick"}
+        if isinstance(value, bool) or isinstance(value, float):
+            value = to_float(value)
+            source = event.name.lower()
+            source = remap.get(source, source)
+
+            if self.web_server:
+                self.web_server.send_message(
+                    {"source": source, "type": "float", "value": value}
+                )
+        elif isinstance(value, Vec2):
+            source = event.name.lower()
+            source = remap.get(source, source)
+
+            if self.web_server:
+                self.web_server.send_message(
+                    {"source": source, "type": "vec2", "x": value.x, "y": value.y}
+                )
+
     def handle_event(self, sdl_event):
         gyro_raw = Vec3()
         accel = Vec3()
@@ -376,6 +403,18 @@ class PyroGyroPad:
                 else:
                     self.gyro_vec += gyro_raw
                     self.accel_vec += accel
+            case evt_type if evt_type in (
+                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
+                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
+                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
+            ):
+                touch_event = sdl_event.gtouchpad
+                pad_id = touch_event.touchpad
+                finger_id = touch_event.finger
+                x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
+                self.logger.debug(
+                    f"pad {pad_id} finger {finger_id} moved to {x},{y} ({pressure})"
+                )
 
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
@@ -383,7 +422,9 @@ class PyroGyroPad:
             target = self.mapping.map.get(source)
             if target:
                 if type(target) in MapDirectTargetTypes:
-                    self.send_value(changed_inputs.get(source), target, source=source)
+                    value = changed_inputs.get(source)
+                    self.send_value(value, target, source=source)
+                    self.send_to_web_server(source, value)
                 else:
                     complex_output_dict = target.map_to_outputs(
                         changed_inputs.get(source),

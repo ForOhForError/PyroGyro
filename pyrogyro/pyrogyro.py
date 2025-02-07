@@ -1,7 +1,3 @@
-# https://github.com/yannbouteiller/vgamepad/
-# https://github.com/Aermoss/PySDL3/
-# https://wiki.libsdl.org/SDL3/APIByCategory
-
 import colorsys
 import ctypes
 import dataclasses
@@ -40,6 +36,7 @@ from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
 from pyrogyro.monitor_focus import WindowChangeEventListener
 from pyrogyro.pyrogyro_pad import PyroGyroPad
+from pyrogyro.web import WebServer
 
 pydirectinput.FAILSAFE = False
 pydirectinput.PAUSE = 0
@@ -50,36 +47,42 @@ SDLCALL = ctypes.CFUNCTYPE(
     ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event)
 )
 
+EVENT_TYPES_FILTER = set()
+
+EVENT_TYPES_IGNORE = set(
+    (
+        sdl3.SDL_EVENT_JOYSTICK_AXIS_MOTION,
+        sdl3.SDL_EVENT_JOYSTICK_BALL_MOTION,
+        sdl3.SDL_EVENT_JOYSTICK_HAT_MOTION,
+        sdl3.SDL_EVENT_JOYSTICK_BUTTON_DOWN,
+        sdl3.SDL_EVENT_JOYSTICK_BUTTON_UP,
+        sdl3.SDL_EVENT_JOYSTICK_ADDED,
+        sdl3.SDL_EVENT_JOYSTICK_REMOVED,
+        sdl3.SDL_EVENT_JOYSTICK_BATTERY_UPDATED,
+        sdl3.SDL_EVENT_JOYSTICK_UPDATE_COMPLETE,
+        sdl3.SDL_EVENT_GAMEPAD_UPDATE_COMPLETE,
+    )
+)
+
+EVENT_TYPES_PASS_TO_PAD = set(
+    (
+        sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION,
+        sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN,
+        sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP,
+        sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
+        sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
+        sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
+        sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE,
+        sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
+        sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
+        sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
+    )
+)
+
 
 @SDLCALL
 def event_filter(userdata, event):
     return not (event.contents.type in EVENT_TYPES_FILTER)
-
-
-EVENT_TYPES_FILTER = tuple()
-
-EVENT_TYPES_IGNORE = (
-    sdl3.SDL_EVENT_JOYSTICK_AXIS_MOTION,
-    sdl3.SDL_EVENT_JOYSTICK_BALL_MOTION,
-    sdl3.SDL_EVENT_JOYSTICK_HAT_MOTION,
-    sdl3.SDL_EVENT_JOYSTICK_BUTTON_DOWN,
-    sdl3.SDL_EVENT_JOYSTICK_BUTTON_UP,
-    sdl3.SDL_EVENT_JOYSTICK_ADDED,
-    sdl3.SDL_EVENT_JOYSTICK_REMOVED,
-    sdl3.SDL_EVENT_JOYSTICK_BATTERY_UPDATED,
-    sdl3.SDL_EVENT_JOYSTICK_UPDATE_COMPLETE,
-    sdl3.SDL_EVENT_GAMEPAD_UPDATE_COMPLETE,
-)
-
-EVENT_TYPES_PASS_TO_PAD = (
-    sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION,
-    sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN,
-    sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP,
-    sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
-    sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
-    sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
-    sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE,
-)
 
 
 class PyroGyroMapper:
@@ -93,6 +96,7 @@ class PyroGyroMapper:
         self.platform = platform.system()
         self.do_platform_setup()
         self.calibrating = False
+        self.web_server = WebServer()
 
         self.pyropads = {}
         self.autoload_configs = {}
@@ -173,9 +177,18 @@ class PyroGyroMapper:
     def init_systray(self):
         if self.platform == "Windows":
             self.logger.info("Starting Tray Icon")
-            menu_options = (("Toggle Console", None, self.toggle_vis),)
+            menu_options = [
+                ("Toggle Console", None, self.toggle_vis),
+            ]
+            if self.web_server:
+                menu_options.append(
+                    ("Open Web Console", None, self.web_server.open_web_ui)
+                )
             self.systray = SysTrayIcon(
-                icon_location(), "PyroGyro", menu_options, on_quit=self.on_quit_callback
+                icon_location(),
+                "PyroGyro",
+                tuple(menu_options),
+                on_quit=self.on_quit_callback,
             )
             self.systray.start()
 
@@ -273,7 +286,9 @@ class PyroGyroMapper:
             if joy_uuid not in self.pyropads:
                 joystick_id = self.sdl_joysticks[joy_uuid]
                 self.logger.info(f"Registering pad for new device {joy_uuid}")
-                self.pyropads[joy_uuid] = PyroGyroPad(self.sdl_joysticks[joy_uuid])
+                self.pyropads[joy_uuid] = PyroGyroPad(
+                    self.sdl_joysticks[joy_uuid], web_server=self.web_server
+                )
         to_remove = []
         for joy_uuid in self.pyropads:
             if joy_uuid not in self.sdl_joysticks:
@@ -330,6 +345,7 @@ class PyroGyroMapper:
         self.init_systray()
         self.init_window_listener()
         self.start_console_input_thread()
+        self.web_server.run_in_thread()
         sdl3.SDL_SetEventFilter(event_filter, None)
 
         if self.window_listener:

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>PyroGyro Web Console</title>
+  </head>
+  <body onload="onLoad()">
+    <script>
+      function valueToColor(value) {
+        switch (typeof(value)) {
+          case 'string':
+            return value;
+          case 'number':
+            inverse = 255*(1.0-value);
+            return ["rgb(",inverse,",",inverse,",",inverse,")"].join("");
+        }
+      }
+
+      function vec2ToTranslate(x, y, size) {
+        return ["translate(",size*x,"px,",size*y,"px)"].join("")
+      }
+
+      function onSvgClick() {
+        console.log("hi")
+      }
+
+      function onLoad() {
+        // Create WebSocket connection.
+        const socket = new WebSocket("ws://{{host}}:{{port}}/ws");
+    
+        // Connection opened
+        socket.addEventListener("open", (event) => {
+          socket.send("Hello Server!");
+        });
+        // Listen for messages
+        socket.addEventListener("message", (event) => {
+          messageObj = JSON.parse(event.data);
+          pad = document.getElementById("gamepad");
+          switch (messageObj.type) {
+            case "float":
+              padPart = pad.contentDocument.getElementById(messageObj.source);
+              padPart.style.fill=valueToColor(messageObj.value);
+              break;
+            case "vec2":
+              padPart = pad.contentDocument.getElementById(messageObj.source);
+              padPart.style.transform = vec2ToTranslate(messageObj.x,messageObj.y, padPart.getBoundingClientRect().width*0.3);
+              break;
+          }
+        });
+
+        document.getElementById("gamepad").addEventListener('click', onSvgClick);
+      }
+    </script>
+    <object id="gamepad" data="gamepad.svg" width="500px" type="image/svg+xml"></object>
+  </body>
+</html>

@@ -276,7 +276,14 @@ class AsDpad(BaseModel):
     DOWN: typing.Optional["MapTarget"] = None
     LEFT: typing.Optional["MapTarget"] = None
 
-    def map_to_outputs(self, input_value, delta_time=0.0):
+    def map_to_outputs(
+        self,
+        input_value,
+        delta_time=0.0,
+        real_world_calibration=1.0,
+        in_game_sens=1.0,
+        os_mouse_speed=1.0,
+    ):
         outputs = {}
         if isinstance(input_value, Vec2):
             length = input_value.length()

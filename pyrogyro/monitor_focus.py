@@ -34,9 +34,18 @@ import threading
 import psutil
 
 EVENT_SYSTEM_DIALOGSTART = 0x0010
+EVENT_SYSTEM_CAPTURESTART = 0x0008
+EVENT_SYSTEM_MENUPOPUPSTART = 0x0006
 WINEVENT_OUTOFCONTEXT = 0x0000
 EVENT_SYSTEM_FOREGROUND = 0x0003
 WINEVENT_SKIPOWNPROCESS = 0x0002
+
+HANDLE_SYSTEM_EVENTS = (
+    EVENT_SYSTEM_FOREGROUND,
+    EVENT_SYSTEM_DIALOGSTART,
+    EVENT_SYSTEM_CAPTURESTART,
+    EVENT_SYSTEM_MENUPOPUPSTART,
+)
 
 user32 = ctypes.windll.user32
 ole32 = ctypes.windll.ole32
@@ -82,7 +91,7 @@ class WindowChangeEventListener(object):
 
     def __init__(self, callback=None):
         self.running = False
-        self.hook = 0
+        self.hooks = set()
         self.focus_exe_name = ""
         self.focus_window_title = ""
         if callback:
@@ -104,22 +113,31 @@ class WindowChangeEventListener(object):
         def win_callback(
             hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime
         ):
-            self.focus_exe_name, self.focus_window_title = _hwnd_to_names(hwnd)
-            self.callback(self.focus_exe_name, self.focus_window_title)
+            exe_name, window_title = _hwnd_to_names(hwnd)
+            if (
+                self.focus_exe_name == exe_name
+                and self.focus_window_title == window_title
+            ):
+                pass
+            else:
+                self.focus_exe_name, self.focus_window_title = _hwnd_to_names(hwnd)
+                self.callback(self.focus_exe_name, self.focus_window_title)
 
         WinEventProc = WinEventProcType(win_callback)
-        hook = user32.SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_FOREGROUND,
-            0,
-            WinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
-        )
-        if hook == 0:
-            logging.error("SetWinEventHook failed")
-            return
+        for event_id in HANDLE_SYSTEM_EVENTS:
+            hook = user32.SetWinEventHook(
+                event_id,
+                event_id,
+                0,
+                WinEventProc,
+                0,
+                0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+            )
+            if hook == 0:
+                logging.error("SetWinEventHook failed")
+            else:
+                self.hooks.add(hook)
         self.running = True
         timer = SetTimer(0, 0, 100, 0)
         msg = ctypes.wintypes.MSG()
@@ -127,7 +145,7 @@ class WindowChangeEventListener(object):
             user32.TranslateMessage(msg)
             user32.DispatchMessageW(msg)
         KillTimer(0, timer)
-        if hook:
+        for hook in self.hooks:
             user32.UnhookWinEvent(hook)
         ole32.CoUninitialize()
 

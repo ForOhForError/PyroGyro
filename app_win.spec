@@ -37,7 +37,7 @@ a = Analysis(
         (path_sdl / '*.dll', './sdl3/bin'),
     ],
     datas=[
-        ('res/*', 'res'),
+        ('res', 'res'),
     ],
     hiddenimports=[],
     hookspath=[],

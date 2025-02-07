@@ -15,11 +15,12 @@ DEFAULT_PORT = 5000
 
 class WebServer:
     def __init__(self, host=DEFAULT_HOST, port=DEFAULT_PORT):
+        web_dir = ROOT_DIR / "res" / "web"
         self.app = Flask(
             __name__,
             static_url_path="",
-            static_folder=ROOT_DIR / "res" / "web" / "static",
-            template_folder=ROOT_DIR / "res" / "web" / "templates",
+            static_folder=web_dir / "static",
+            template_folder=web_dir / "templates",
         )
         logging.getLogger("werkzeug").disabled = True
         self.host = host

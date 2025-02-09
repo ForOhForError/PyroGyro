@@ -173,6 +173,12 @@ MapDirectTargetTypes = (
 )
 
 
+# container for an input to preserve its value to keep sending
+@dataclass
+class StickyInput:
+    input_value: typing.Any
+
+
 class MapComplexTarget(BaseModel):
     output: MapDirectTarget
     on: str
@@ -306,7 +312,37 @@ class AsDpad(BaseModel):
         return outputs
 
 
-MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad, AsAim]
+class AsGridSticks(BaseModel):
+    map_as: typing.Literal["GRID_STICKS"]
+    stick_out: typing.Optional["MapTarget"] = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._start_points = {}
+
+    def map_to_outputs(
+        self,
+        input_value,
+        delta_time=0.0,
+        real_world_calibration=1.0,
+        in_game_sens=1.0,
+        os_mouse_speed=1.0,
+    ):
+        outputs = {}
+        if isinstance(input_value, dict):
+            for finger_index in input_value:
+                entry = input_value[finger_index]
+                if isinstance(entry, Vec2):
+                    if finger_index not in self._start_points:
+                        self._start_points[finger_index] = entry
+                    result = (
+                        entry - self._start_points[finger_index]
+                    ) * 2  # correct range
+                    outputs[stick_out] = StickyInput(result)
+        return outputs
+
+
+MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad, AsAim, AsGridSticks]
 MapSource = MapDirectSource
 
 

@@ -60,7 +60,19 @@ class InputStore:
         self._changed.add(source)
 
     def get_inputs(self):
-        return {key: self._inputs[key] for key in self._changed}
+        out = {}
+        for key in self._changed:
+            val = self._inputs[key]
+            if isinstance(val, StickyInput):
+                out[key] = val.input_value
+            else:
+                out[key] = val
+        return out
+
+    def clear(self):
+        for key in self._changed.copy():
+            if not isinstance(self._inputs[key], StickyInput):
+                self._changed.remove(key)
 
 
 @dataclass
@@ -301,8 +313,8 @@ class PyroGyroPad:
                         self.leftover_vel.set_value(extra_x, extra_y)
                     else:
                         self.move_mouse(
-                            source_value.x * -3,
-                            source_value.y * -3,
+                            -source_value.x,
+                            -source_value.y,
                         )
 
     def move_mouse(
@@ -337,13 +349,14 @@ class PyroGyroPad:
                     {"source": source, "type": "float", "value": value}
                 )
         elif isinstance(value, Vec2):
-            source = event.name.lower()
-            source = remap.get(source, source)
+            if event != GyroSource.GYRO:
+                source = event.name.lower()
+                source = remap.get(source, source)
 
-            if self.web_server:
-                self.web_server.send_message(
-                    {"source": source, "type": "vec2", "x": value.x, "y": value.y}
-                )
+                if self.web_server:
+                    self.web_server.send_message(
+                        {"source": source, "type": "vec2", "x": value.x, "y": value.y}
+                    )
 
     def handle_event(self, sdl_event):
         gyro_raw = Vec3()
@@ -378,9 +391,9 @@ class PyroGyroPad:
                         this_value = axis_event.value / 32768.0
                         other_value = self.paired_axis_event_sink.get(other_axis)
                         if double_enum.value.index(enum_val) == 0:
-                            target_value = Vec2(this_value, other_value)
+                            target_value = StickyInput(Vec2(this_value, other_value))
                         else:
-                            target_value = Vec2(other_value, this_value)
+                            target_value = StickyInput(Vec2(other_value, this_value))
                         self.input_store.put_input(double_enum, target_value)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
@@ -419,12 +432,11 @@ class PyroGyroPad:
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
         for source in changed_inputs:
+            value = changed_inputs.get(source)
             target = self.mapping.map.get(source)
             if target:
                 if type(target) in MapDirectTargetTypes:
-                    value = changed_inputs.get(source)
                     self.send_value(value, target, source=source)
-                    self.send_to_web_server(source, value)
                 else:
                     complex_output_dict = target.map_to_outputs(
                         changed_inputs.get(source),
@@ -438,6 +450,8 @@ class PyroGyroPad:
                             mapped_output_key,
                             source=source,
                         )
+            self.send_to_web_server(source, value)
+        self.input_store.clear()
 
     def update(self, time_now: float):
         if not self.last_timestamp:

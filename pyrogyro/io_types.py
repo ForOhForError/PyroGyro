@@ -10,6 +10,7 @@ from pydantic import BaseModel, BeforeValidator, PlainSerializer
 from vgamepad import DS4_BUTTONS, XUSB_BUTTON
 
 from pyrogyro.math import *
+from pyrogyro.platform import keyDown, keyUp, mouseDown, mouseUp, move_mouse
 
 EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
@@ -35,6 +36,18 @@ KeyboardKeyTarget = enum.Enum(
 )
 
 
+def up(key: KeyboardKeyTarget):
+    keyUp(key.value)
+
+
+def down(key: KeyboardKeyTarget):
+    keyDown(key.value)
+
+
+setattr(KeyboardKeyTarget, "up", up)
+setattr(KeyboardKeyTarget, "down", down)
+
+
 class ButtonTarget(enum.Enum):
     X_A = XUSB_BUTTON.XUSB_GAMEPAD_A
     X_B = XUSB_BUTTON.XUSB_GAMEPAD_B
@@ -56,11 +69,26 @@ class ButtonTarget(enum.Enum):
 class MouseTarget(enum.Enum):
     MOUSE = "MOUSE"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._leftover_vel = Vec2()
+
+    def move_mouse(self, x: float, y: float):
+        self._leftover_vel.set_value(
+            *move_mouse(x, y, self._leftover_vel.x, self._leftover_vel.y)
+        )
+
 
 class MouseButtonTarget(enum.Enum):
     LMOUSE = PRIMARY
     RMOUSE = SECONDARY
     MMOUSE = MIDDLE
+
+    def up(self):
+        mouseUp(button=self.value)
+
+    def down(self):
+        mouseDown(button=self.value)
 
 
 class SDLButtonSource(enum.Enum):

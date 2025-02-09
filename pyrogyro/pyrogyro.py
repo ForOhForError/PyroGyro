@@ -5,7 +5,6 @@ import enum
 import importlib.metadata
 import logging
 import os.path
-import platform
 import re
 import sys
 import threading
@@ -14,11 +13,8 @@ import typing
 import uuid
 from pathlib import Path
 
-import pyautogui
-import pydirectinput
 import sdl3
 import vgamepad as vg
-from infi.systray import SysTrayIcon
 from pydantic import ValidationError
 from ruamel.yaml.scanner import ScannerError
 
@@ -34,14 +30,14 @@ from pyrogyro.constants import (
 )
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
-from pyrogyro.monitor_focus import WindowChangeEventListener
+from pyrogyro.platform import (
+    init_systray,
+    init_window_listener,
+    set_console_title,
+    set_console_visibility,
+)
 from pyrogyro.pyrogyro_pad import PyroGyroPad
 from pyrogyro.web import WebServer
-
-pydirectinput.FAILSAFE = False
-pydirectinput.PAUSE = 0
-pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0
 
 SDLCALL = ctypes.CFUNCTYPE(
     ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event)
@@ -93,7 +89,6 @@ class PyroGyroMapper:
         self.poll_rate = poll_rate
         self.systray = None
         self.window_listener = None
-        self.platform = platform.system()
         self.do_platform_setup()
         self.calibrating = False
         self.web_server = WebServer()
@@ -170,39 +165,30 @@ class PyroGyroMapper:
         self.autoload_refresh_and_evaluate(exe_name, window_title)
 
     def do_platform_setup(self):
-        if self.platform == "Windows":
-            self.kernel32 = ctypes.WinDLL("kernel32")
-            self.user32 = ctypes.WinDLL("user32")
-            self.kernel32.SetConsoleTitleW("PyroGyro Console")
+        set_console_title("PyroGyro Console")
 
     def on_quit_callback(self, *args, **kwargs):
         self.running = False
 
     def init_systray(self):
-        if self.platform == "Windows":
-            self.logger.info("Starting Tray Icon")
-            menu_options = [
-                ("Toggle Console", None, self.toggle_vis),
-            ]
-            if self.web_server:
-                menu_options.append(
-                    ("Open Web Console", None, self.web_server.open_web_ui)
-                )
-            self.systray = SysTrayIcon(
-                icon_location(),
-                "PyroGyro",
-                tuple(menu_options),
-                on_quit=self.on_quit_callback,
-            )
-            self.systray.start()
+        self.logger.info("Starting Tray Icon")
+        menu_options = [
+            ("Toggle Console", None, self.toggle_vis),
+        ]
+        if self.web_server:
+            menu_options.append(("Open Web Console", None, self.web_server.open_web_ui))
+        self.systray = init_systray(
+            icon_location(),
+            "PyroGyro",
+            tuple(menu_options),
+            on_quit=self.on_quit_callback,
+        )
 
     def init_window_listener(self):
-        if self.platform == "Windows":
-            self.logger.info("Starting Window Listener")
-            self.window_listener = WindowChangeEventListener(
-                callback=self.on_focus_change
-            )
-            self.window_listener.listen_in_thread()
+        self.logger.info("Starting Window Listener")
+        self.window_listener = init_window_listener(
+            on_focus_change=self.on_focus_change
+        )
 
     def start_calibration(self):
         self.logger.info("Starting gyro calibration on all devices")
@@ -236,9 +222,7 @@ class PyroGyroMapper:
 
     def toggle_vis(self, *args):
         self.visible = not self.visible
-        if self.platform == "Windows":
-            hWnd = self.kernel32.GetConsoleWindow()
-            self.user32.ShowWindow(hWnd, 1 if self.visible else 0)
+        set_console_visibility(self.visible)
 
     @classmethod
     def init_sdl(cls):

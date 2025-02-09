@@ -6,8 +6,6 @@ import typing
 import uuid
 from dataclasses import dataclass, field
 
-import pyautogui
-import pydirectinput
 import sdl3
 import vgamepad as vg
 
@@ -209,14 +207,14 @@ class PyroGyroPad:
         old_value = self.mkb_state.get(target_enum, False)
         if isinstance(target_enum, MouseButtonTarget) and old_value != target_value:
             if target_value:
-                pydirectinput.mouseDown(button=target_enum.value)
+                target_enum.down()
             else:
-                pydirectinput.mouseUp(button=target_enum.value)
+                target_enum.up()
         elif isinstance(target_enum, KeyboardKeyTarget) and old_value != target_value:
             if target_value:
-                pydirectinput.keyDown(target_enum.value)
+                target_enum.down()
             else:
-                pydirectinput.keyUp(target_enum.value)
+                target_enum.up()
         self.mkb_state[target_enum] = target_value
 
     @property
@@ -303,33 +301,10 @@ class PyroGyroPad:
                 self.set_mkb_bool_state(target_enum, to_bool(source_value))
             case pyrogyro.io_types.MouseTarget:
                 if isinstance(source_value, Vec2):
-                    if source == GyroSource.GYRO:
-                        extra_x, extra_y = self.move_mouse(
-                            source_value.x,
-                            source_value.y,
-                            extra_x=self.leftover_vel.x,
-                            extra_y=self.leftover_vel.y,
-                        )
-                        self.leftover_vel.set_value(extra_x, extra_y)
-                    else:
-                        self.move_mouse(
-                            -source_value.x,
-                            -source_value.y,
-                        )
-
-    def move_mouse(
-        self,
-        x: float,
-        y: float,
-        extra_x: float = 0.0,
-        extra_y: float = 0.0,
-    ):
-        vel_x = x + extra_x
-        vel_y = y + extra_y
-        pydirectinput.move(-int(vel_x), -int(vel_y), relative=True)
-        leftover_x = vel_x % sign(vel_x)
-        leftover_y = vel_y % sign(vel_y)
-        return leftover_x, leftover_y
+                    target_enum.move_mouse(
+                        source_value.x,
+                        source_value.y,
+                    )
 
     def on_poll_start(self):
         self.gyro_vec.set_value(0, 0, 0)

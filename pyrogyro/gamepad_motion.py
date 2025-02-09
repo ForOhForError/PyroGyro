@@ -287,4 +287,5 @@ class GyroConfig:
         mouse_calib = real_world_calibration / os_mouse_speed / in_game_sens
         camera_vec = self.gyro_camera(gyro, grav_norm, delta_seconds)
         camera_vec *= mouse_calib
+        camera_vec *= -1
         return camera_vec

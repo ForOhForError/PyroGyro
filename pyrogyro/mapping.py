@@ -43,7 +43,7 @@ class AutoloadConfig(BaseModel):
     def count_specificity(self):
         return sum(
             (
-                1 if val != "*" else 0
+                1 if val != ".*" else 0
                 for val in (
                     self.match_exe_name,
                     self.match_window_name,

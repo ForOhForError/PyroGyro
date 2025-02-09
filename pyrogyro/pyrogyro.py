@@ -97,6 +97,7 @@ class PyroGyroMapper:
         self.do_platform_setup()
         self.calibrating = False
         self.web_server = WebServer()
+        self.config_lock = threading.Lock()
 
         self.pyropads = {}
         self.autoload_configs = {}
@@ -153,13 +154,16 @@ class PyroGyroMapper:
             self.autoload_configs.pop(config_path)
 
     def autoload_refresh_and_evaluate(self, exe_name, window_title):
-        self.refresh_autoload_mappings()
-        configs_to_check = [
-            mapping_tuple[0] for mapping_tuple in self.autoload_configs.values()
-        ]
-        self.logger.debug(f"checking {len(configs_to_check)} config(s)")
-        for pyropad in self.pyropads.values():
-            pyropad.evaluate_autoload_mappings(configs_to_check, exe_name, window_title)
+        with self.config_lock:
+            self.refresh_autoload_mappings()
+            configs_to_check = [
+                mapping_tuple[0] for mapping_tuple in self.autoload_configs.values()
+            ]
+            self.logger.debug(f"checking {len(configs_to_check)} config(s)")
+            for pyropad in self.pyropads.values():
+                pyropad.evaluate_autoload_mappings(
+                    configs_to_check, exe_name, window_title
+                )
 
     def on_focus_change(self, exe_name, window_title):
         self.logger.debug(f"window changed to: {window_title} ({exe_name})")

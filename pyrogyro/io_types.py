@@ -31,6 +31,11 @@ def enum_or_by_name(T):
     ]
 
 
+class InputPreserver:
+    def preserve_input(self, input_val=None):
+        return True
+
+
 KeyboardKeyTarget = enum.Enum(
     "KeyboardKeyTarget", {key.upper(): key for key in KEYBOARD_KEYS}
 )
@@ -66,7 +71,7 @@ class ButtonTarget(enum.Enum):
     X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
 
-class MouseTarget(enum.Enum):
+class MouseTarget(InputPreserver, enum.Enum):
     MOUSE = "MOUSE"
 
     def __init__(self, *args, **kwargs):
@@ -77,6 +82,11 @@ class MouseTarget(enum.Enum):
         self._leftover_vel.set_value(
             *move_mouse(x, y, self._leftover_vel.x, self._leftover_vel.y)
         )
+
+    def preserve_input(self, input_val=None):
+        if isinstance(input_val, Vec2) and input_val.length() > 0.01:
+            return True
+        return False
 
 
 class MouseButtonTarget(enum.Enum):
@@ -201,12 +211,6 @@ MapDirectTargetTypes = (
 )
 
 
-# container for an input to preserve its value to keep sending
-@dataclass
-class StickyInput:
-    input_value: typing.Any
-
-
 class MapComplexTarget(BaseModel):
     output: MapDirectTarget
     on: str
@@ -218,7 +222,7 @@ class MapComplexTarget(BaseModel):
 ZERO_VEC2 = Vec2()
 
 
-class AsAim(BaseModel):
+class AsAim(InputPreserver, BaseModel):
     map_as: typing.Literal["AIM"]
     o: "MapTarget"
     sens: typing.Union[float, typing.Tuple[float, float]] = 360.0
@@ -244,6 +248,11 @@ class AsAim(BaseModel):
         )
         progress = magnitude**self.power
         return Vec2.lerp(ZERO_VEC2, input_vec.normalized(), progress)
+
+    def preserve_input(self, input_val=None):
+        if isinstance(input_val, Vec2) and input_val.length() > 0.01:
+            return True
+        return False
 
     @property
     def sens_vec(self):
@@ -366,7 +375,7 @@ class AsGridSticks(BaseModel):
                     result = (
                         entry - self._start_points[finger_index]
                     ) * 2  # correct range
-                    outputs[stick_out] = StickyInput(result)
+                    outputs[stick_out] = result
         return outputs
 
 

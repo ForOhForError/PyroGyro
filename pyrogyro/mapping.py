@@ -140,7 +140,7 @@ class Mapping(Layer):
         )
 
     def get_os_mouse_speed_correction(self):
-        return get_os_mouse_speed() if counter_os_mouse_speed else 1.0
+        return get_os_mouse_speed() if self.counter_os_mouse_speed else 1.0
 
     @property
     def map(self):

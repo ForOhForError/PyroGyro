@@ -50,6 +50,7 @@ class InputStore:
         default_factory=dict
     )
     _changed: typing.Set[MapDirectSource] = field(default_factory=set)
+    _preserved: typing.Set[MapDirectSource] = field(default_factory=set)
 
     def put_input(
         self, source: MapDirectSource, value: typing.Union[Vec2, float, bool]
@@ -61,16 +62,20 @@ class InputStore:
         out = {}
         for key in self._changed:
             val = self._inputs[key]
-            if isinstance(val, StickyInput):
-                out[key] = val.input_value
-            else:
-                out[key] = val
+            out[key] = val
         return out
 
+    def set_preserved(self, source: MapDirectSource, preserved: bool):
+        if preserved:
+            if source not in self._preserved:
+                self._preserved.add(source)
+        else:
+            if source in self._preserved:
+                self._preserved.remove(source)
+
     def clear(self):
-        for key in self._changed.copy():
-            if not isinstance(self._inputs[key], StickyInput):
-                self._changed.remove(key)
+        self._changed.clear()
+        self._changed |= self._preserved
 
 
 @dataclass
@@ -239,7 +244,6 @@ class PyroGyroPad:
                     ),
                     re.fullmatch(mapping.autoload.match_window_name, window_title),
                     re.fullmatch(mapping.autoload.match_exe_name, exe_name),
-                    mapping != self.mapping,
                 )
             ):
                 potential_mappings.append(mapping)
@@ -259,7 +263,7 @@ class PyroGyroPad:
                 )
                 if remaining_mappings == 1:
                     new_mapping = best_match
-        if new_mapping:
+        if new_mapping and (new_mapping != self.mapping):
             self.logger.info(
                 f"Applying mapping '{new_mapping.name}' to PyroGyro pad for controller '{controller_name}'"
             )
@@ -366,9 +370,9 @@ class PyroGyroPad:
                         this_value = axis_event.value / 32768.0
                         other_value = self.paired_axis_event_sink.get(other_axis)
                         if double_enum.value.index(enum_val) == 0:
-                            target_value = StickyInput(Vec2(this_value, other_value))
+                            target_value = Vec2(this_value, other_value)
                         else:
-                            target_value = StickyInput(Vec2(other_value, this_value))
+                            target_value = Vec2(other_value, this_value)
                         self.input_store.put_input(double_enum, target_value)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
@@ -410,11 +414,13 @@ class PyroGyroPad:
             value = changed_inputs.get(source)
             target = self.mapping.map.get(source)
             if target:
+                if isinstance(target, InputPreserver):
+                    self.input_store.set_preserved(source, target.preserve_input(value))
                 if type(target) in MapDirectTargetTypes:
                     self.send_value(value, target, source=source)
                 else:
                     complex_output_dict = target.map_to_outputs(
-                        changed_inputs.get(source),
+                        value,
                         delta_time=delta_time,
                         real_world_calibration=self.mapping.get_real_world_calibration(),
                         in_game_sens=self.mapping.get_in_game_sens(),

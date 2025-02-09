@@ -57,6 +57,12 @@ match SYSTEM:
             window_listener.listen_in_thread()
             return window_listener
 
+        def get_os_mouse_speed():
+            get_mouse_speed = 0x0070
+            speed = ctypes.c_int()
+            user32.SystemParametersInfoA(get_mouse_speed, 0, ctypes.byref(speed), 0)
+            return float(speed.value)
+
     case _:
         import pyautogui
         from pyautogui import keyDown, keyUp, mouseDown, mouseUp
@@ -91,3 +97,6 @@ match SYSTEM:
 
         def init_window_listener(on_focus_change):
             return None
+
+        def get_os_mouse_speed():
+            return 1.0

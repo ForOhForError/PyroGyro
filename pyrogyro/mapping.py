@@ -19,6 +19,7 @@ from pyrogyro.io_types import (
     SingleAxisTarget,
     enum_or_by_name,
 )
+from pyrogyro.platform import get_os_mouse_speed
 
 yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
@@ -123,6 +124,12 @@ class Mapping(Layer):
     layers: collections.abc.Mapping[str, Layer] = Field(default_factory=CommentedMap)
     real_world_calibration: typing.Optional[float] = None
     in_game_sens: typing.Optional[float] = None
+    counter_os_mouse_speed: typing.Optional[bool] = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._loaded_yml_map = None
+        self._active_layers = set()
 
     def get_in_game_sens(self):
         return self.in_game_sens if self.in_game_sens else 1.0
@@ -132,10 +139,8 @@ class Mapping(Layer):
             self.real_world_calibration if self.real_world_calibration else (16.0 / 3)
         )
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._loaded_yml_map = None
-        self._active_layers = set()
+    def get_os_mouse_speed_correction(self):
+        return get_os_mouse_speed() if counter_os_mouse_speed else 1.0
 
     @property
     def map(self):

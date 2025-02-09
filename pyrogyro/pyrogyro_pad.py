@@ -418,6 +418,7 @@ class PyroGyroPad:
                         delta_time=delta_time,
                         real_world_calibration=self.mapping.get_real_world_calibration(),
                         in_game_sens=self.mapping.get_in_game_sens(),
+                        os_mouse_speed=self.mapping.get_os_mouse_speed_correction(),
                     )
                     for mapped_output_key in complex_output_dict:
                         self.send_value(

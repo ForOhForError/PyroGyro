@@ -522,20 +522,6 @@ files = [
 all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2)"]
 
 [[package]]
-name = "infi-systray"
-version = "0.1.12.1"
-description = "Windows system tray icon"
-optional = false
-python-versions = "*"
-files = [
-    {file = "infi.systray-0.1.12.1-py3-none-any.whl", hash = "sha256:3c82b9b1d445af68780d7c095b18ab73bff73f5bd0c904011fb1e28f24a241c6"},
-    {file = "infi.systray-0.1.12.1.tar.gz", hash = "sha256:72595f2d88df774079cf4881a15a7ad8e40153d1238997769d7c75ab1b36bc6f"},
-]
-
-[package.dependencies]
-setuptools = "*"
-
-[[package]]
 name = "isort"
 version = "5.13.2"
 description = "A Python utility / library to sort Python imports."
@@ -1371,13 +1357,13 @@ Pillow = {version = ">=9.3.0", markers = "python_version == \"3.11\""}
 
 [[package]]
 name = "pysdl3"
-version = "0.9.3b2"
+version = "0.9.4b2"
 description = "A pure Python wrapper for SDL3."
 optional = false
 python-versions = "*"
 files = [
-    {file = "PySDL3-0.9.3b2-py3-none-any.whl", hash = "sha256:3ef341317191c4746fb2f143d666efd3a2ebefdd0adf87a843845308860e4a06"},
-    {file = "pysdl3-0.9.3b2.tar.gz", hash = "sha256:c720f1561f456960dd9572205eba07ea35aa0689b1c825ea7e9bbe9655713793"},
+    {file = "PySDL3-0.9.4b2-py3-none-any.whl", hash = "sha256:a9518b37843c81fe6f6cba8a02f49ec641bb2f4a38d7e247cebd8f569247855b"},
+    {file = "pysdl3-0.9.4b2.tar.gz", hash = "sha256:5d0e68835904a591381d0daac1c0cf6eca807f6ac8323da536c25996036799d1"},
 ]
 
 [package.dependencies]
@@ -1731,4 +1717,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.14"
-content-hash = "154f49f19958e0abb55ffa93c595f7a7fa50ceb7d2034ad70c339a844007559d"
+content-hash = "4a38d89d088c005cd45b9260d1b40659d140e1c7a8c738360bf443a9f0ac0454"

@@ -52,6 +52,12 @@ class Vec2:
         else:
             return Vec2(self.x + other, self.y + other)
 
+    def __sub__(self, other):
+        if isinstance(other, Vec2):
+            return Vec2(self.x - other.x, self.y - other.y)
+        else:
+            return Vec2(self.x - other, self.y - other)
+
     def __iadd__(self, other):
         if isinstance(other, Vec2):
             self.x = self.x + other.x

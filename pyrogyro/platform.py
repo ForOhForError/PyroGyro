@@ -1,6 +1,8 @@
 import ctypes
 import platform
 
+import sdl3
+
 from pyrogyro.math import *
 
 SYSTEM = platform.system()
@@ -8,7 +10,6 @@ SYSTEM = platform.system()
 match SYSTEM:
     case "Windows":
         import pydirectinput
-        from infi.systray import SysTrayIcon
         from pydirectinput import keyDown, keyUp, mouseDown, mouseUp
         from pydirectinput import moveRel as _movemouse
 
@@ -39,18 +40,6 @@ match SYSTEM:
         def set_console_visibility(visibility: bool):
             hWnd = kernel32.GetConsoleWindow()
             user32.ShowWindow(hWnd, 1 if visibility else 0)
-
-        def init_systray(
-            icon_location, tray_title, menu_options, on_quit=None, **kwargs
-        ):
-            systray = SysTrayIcon(
-                icon_location,
-                tray_title,
-                menu_options,
-                on_quit=on_quit,
-            )
-            systray.start()
-            return systray
 
         def init_window_listener(on_focus_change):
             window_listener = WindowChangeEventListener(callback=on_focus_change)

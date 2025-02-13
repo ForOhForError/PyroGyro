@@ -177,9 +177,14 @@ class GyroSource(enum.Enum):
     GYRO = "GYRO"
 
 
+class TouchSource(enum.Enum):
+    TOUCH = "TOUCH"
+
+
 Vec2Source = typing.Union[enum_or_by_name(DoubleAxisSource), GyroSource]
 FloatSource = typing.Union[enum_or_by_name(SingleAxisSource)]
 BinarySource = typing.Union[enum_or_by_name(SDLButtonSource)]
+DictSource = typing.Union[enum_or_by_name(TouchSource)]
 
 
 def get_double_source_for_axis(single_axis_source):
@@ -189,7 +194,7 @@ def get_double_source_for_axis(single_axis_source):
     return None
 
 
-MapDirectSource = typing.Union[Vec2Source, FloatSource, BinarySource]
+MapDirectSource = typing.Union[Vec2Source, FloatSource, BinarySource, DictSource]
 
 MapDirectTarget = typing.Union[
     enum_or_by_name(KeyboardKeyTarget),
@@ -209,6 +214,37 @@ MapDirectTargetTypes = (
     MouseTarget,
     types.NoneType,
 )
+
+
+def resolve_outputs(
+    resolve_dict,
+    target,
+    value,
+    delta_time=0.0,
+    real_world_calibration=1.0,
+    in_game_sens=1.0,
+    os_mouse_speed=1.0,
+):
+    if type(target) in MapDirectTargetTypes:
+        resolve_dict[target] = value
+    else:
+        rec_updates = target.map_to_outputs(
+            value,
+            delta_time=delta_time,
+            real_world_calibration=real_world_calibration,
+            in_game_sens=in_game_sens,
+            os_mouse_speed=os_mouse_speed,
+        )
+        for key in rec_updates:
+            resolve_outputs(
+                resolve_dict,
+                key,
+                rec_updates[key],
+                real_world_calibration=real_world_calibration,
+                in_game_sens=in_game_sens,
+                os_mouse_speed=os_mouse_speed,
+            )
+    return resolve_dict
 
 
 class MapComplexTarget(BaseModel):
@@ -289,14 +325,16 @@ class AsAim(InputPreserver, BaseModel):
         real_world_calibration=1.0,
         in_game_sens=1.0,
         os_mouse_speed=1.0,
+        **kwargs
     ):
+        result = ZERO_VEC2
         if isinstance(input_value, Vec2):
             magnitude = input_value.length()
             full_tilt = magnitude >= self._max_output_thresh
             if not full_tilt:
                 self._accel_mult = 1.0
             if magnitude >= self.deadzone_inner:
-                final_vec = self.get_velocity_vec(
+                result = self.get_velocity_vec(
                     input_value,
                     delta_time,
                     real_world_calibration=real_world_calibration,
@@ -308,8 +346,16 @@ class AsAim(InputPreserver, BaseModel):
                         self._accel_mult + (delta_time * self.accel_rate),
                         self.accel_cap,
                     )
-                return {self.o: final_vec}
-        return {self.o: ZERO_VEC2}
+        return resolve_outputs(
+            {},
+            self.o,
+            result,
+            delta_time=delta_time,
+            real_world_calibration=real_world_calibration,
+            in_game_sens=in_game_sens,
+            os_mouse_speed=os_mouse_speed,
+            **kwargs
+        )
 
 
 class AsDpad(BaseModel):
@@ -319,29 +365,34 @@ class AsDpad(BaseModel):
     DOWN: typing.Optional["MapTarget"] = None
     LEFT: typing.Optional["MapTarget"] = None
 
-    def map_to_outputs(
-        self,
-        input_value,
-        delta_time=0.0,
-        real_world_calibration=1.0,
-        in_game_sens=1.0,
-        os_mouse_speed=1.0,
-    ):
+    def __hash__(self):
+        return hash((self.map_as))
+
+    def map_to_outputs(self, input_value, **kwargs):
         outputs = {}
         if isinstance(input_value, Vec2):
             length = input_value.length()
             if length > 0.1:
                 angle = input_value.angle()
                 if self.UP:
-                    outputs[self.UP] = (angle >= 310 and angle <= 360) or (
-                        angle >= 0 and angle <= 50
+                    resolve_outputs(
+                        outputs,
+                        self.UP,
+                        (angle >= 310 and angle <= 360) or (angle >= 0 and angle <= 50),
+                        **kwargs
                     )
                 if self.LEFT:
-                    outputs[self.LEFT] = angle >= 40 and angle <= 140
+                    resolve_outputs(
+                        outputs, self.LEFT, angle >= 40 and angle <= 140, **kwargs
+                    )
                 if self.DOWN:
-                    outputs[self.DOWN] = angle >= 130 and angle <= 230
+                    resolve_outputs(
+                        outputs, self.DOWN, angle >= 130 and angle <= 230, **kwargs
+                    )
                 if self.RIGHT:
-                    outputs[self.RIGHT] = angle >= 220 and angle <= 320
+                    resolve_outputs(
+                        outputs, self.RIGHT, angle >= 220 and angle <= 320, **kwargs
+                    )
             else:
                 for out in (self.UP, self.RIGHT, self.DOWN, self.LEFT):
                     if out:
@@ -351,31 +402,39 @@ class AsDpad(BaseModel):
 
 class AsGridSticks(BaseModel):
     map_as: typing.Literal["GRID_STICKS"]
-    stick_out: typing.Optional["MapTarget"] = None
+    pad_fingers: typing.Optional[
+        typing.Mapping[int, typing.Mapping[int, "MapTarget"]]
+    ] = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._start_points = {}
 
-    def map_to_outputs(
-        self,
-        input_value,
-        delta_time=0.0,
-        real_world_calibration=1.0,
-        in_game_sens=1.0,
-        os_mouse_speed=1.0,
-    ):
+    def map_to_outputs(self, input_value, **kwargs):
         outputs = {}
         if isinstance(input_value, dict):
+            to_remove = set()
+            for finger_index in set(self._start_points.keys()):
+                if finger_index not in input_value:
+                    self._start_points.pop(finger_index)
+                    if self.pad_fingers:
+                        target = self.pad_fingers.get(finger_index[0], {}).get(
+                            finger_index[1]
+                        )
+                        if target:
+                            resolve_outputs(outputs, target, Vec2(0, 0), **kwargs)
             for finger_index in input_value:
                 entry = input_value[finger_index]
                 if isinstance(entry, Vec2):
                     if finger_index not in self._start_points:
                         self._start_points[finger_index] = entry
-                    result = (
-                        entry - self._start_points[finger_index]
-                    ) * 2  # correct range
-                    outputs[stick_out] = result
+                    result = entry - self._start_points[finger_index]
+                    if self.pad_fingers:
+                        target = self.pad_fingers.get(finger_index[0], {}).get(
+                            finger_index[1]
+                        )
+                        if target:
+                            resolve_outputs(outputs, target, result, **kwargs)
         return outputs
 
 

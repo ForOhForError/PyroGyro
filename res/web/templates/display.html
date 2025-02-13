@@ -19,7 +19,8 @@
         return ["translate(",size*x,"px,",size*y,"px)"].join("")
       }
 
-      function onSvgClick() {
+      function onSvgClick(event) {
+        event.preventDefault();
         console.log("hi")
       }
 
@@ -46,8 +47,8 @@
               break;
           }
         });
-
-        document.getElementById("gamepad").addEventListener('click', onSvgClick);
+        pad = document.getElementById("gamepad");
+        pad.addEventListener('click', onSvgClick);
       }
     </script>
     <object id="gamepad" data="gamepad.svg" width="500px" type="image/svg+xml"></object>

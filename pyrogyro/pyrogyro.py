@@ -21,6 +21,7 @@ from ruamel.yaml.scanner import ScannerError
 import pyrogyro.io_types
 from pyrogyro.constants import (
     DEBUG,
+    DEFAULT_POLL_RATE,
     LOG_FORMAT,
     LOG_FORMAT_DEBUG,
     LOG_LEVEL,
@@ -31,15 +32,15 @@ from pyrogyro.constants import (
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
 from pyrogyro.platform import (
-    init_systray,
     init_window_listener,
     set_console_title,
     set_console_visibility,
 )
 from pyrogyro.pyrogyro_pad import PyroGyroPad
+from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 
-SDLCALL = ctypes.CFUNCTYPE(
+SDL_EVENT_CALL = ctypes.CFUNCTYPE(
     ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event)
 )
 
@@ -76,13 +77,13 @@ EVENT_TYPES_PASS_TO_PAD = set(
 )
 
 
-@SDLCALL
+@SDL_EVENT_CALL
 def event_filter(userdata, event):
     return not (event.contents.type in EVENT_TYPES_FILTER)
 
 
 class PyroGyroMapper:
-    def __init__(self, poll_rate=1000):
+    def __init__(self, poll_rate=DEFAULT_POLL_RATE):
         self.logger = logging.getLogger("PyroGyroMapper")
         self.visible = True
         self.running = True
@@ -167,22 +168,18 @@ class PyroGyroMapper:
     def do_platform_setup(self):
         set_console_title("PyroGyro Console")
 
-    def on_quit_callback(self, *args, **kwargs):
+    def on_quit_callback(self, userdata, entry):
         self.running = False
 
     def init_systray(self):
         self.logger.info("Starting Tray Icon")
-        menu_options = [
-            ("Toggle Console", None, self.toggle_vis),
-        ]
+        self.systray = SystemTray("PyroGyro", icon_location())
+        self.systray.add_menu_option("Quit", callback=self.on_quit_callback)
+        self.systray.add_menu_option("Toggle Console", callback=self.toggle_vis)
         if self.web_server:
-            menu_options.append(("Open Web Console", None, self.web_server.open_web_ui))
-        self.systray = init_systray(
-            icon_location(),
-            "PyroGyro",
-            tuple(menu_options),
-            on_quit=self.on_quit_callback,
-        )
+            self.systray.add_menu_option(
+                "Open Web Console", callback=self.web_server.open_web_ui
+            )
 
     def init_window_listener(self):
         self.logger.info("Starting Window Listener")
@@ -228,7 +225,10 @@ class PyroGyroMapper:
     def init_sdl(cls):
         sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1".encode())
         sdl_init_flags = (
-            sdl3.SDL_INIT_GAMEPAD | sdl3.SDL_INIT_HAPTIC | sdl3.SDL_INIT_SENSOR
+            sdl3.SDL_INIT_VIDEO
+            | sdl3.SDL_INIT_GAMEPAD
+            | sdl3.SDL_INIT_HAPTIC
+            | sdl3.SDL_INIT_SENSOR
         )
         sdl3.SDL_Init(sdl_init_flags)
 
@@ -275,7 +275,9 @@ class PyroGyroMapper:
                 joystick_id = self.sdl_joysticks[joy_uuid]
                 self.logger.info(f"Registering pad for new device {joy_uuid}")
                 self.pyropads[joy_uuid] = PyroGyroPad(
-                    self.sdl_joysticks[joy_uuid], web_server=self.web_server
+                    self.sdl_joysticks[joy_uuid],
+                    web_server=self.web_server,
+                    parent=self,
                 )
         to_remove = []
         for joy_uuid in self.pyropads:
@@ -288,6 +290,8 @@ class PyroGyroMapper:
 
     def input_poll(self):
         while self.running:
+            start_time = time.time_ns()
+            ns_per_poll = int(1000000000 / self.poll_rate)
             populate_pads = False
             event = sdl3.SDL_Event()
             for pypad in self.pyropads.values():
@@ -319,10 +323,12 @@ class PyroGyroMapper:
                 else:
                     exe_name, window_title = "pyrogyro.exe", "PyroGyro Console"
                 self.autoload_refresh_and_evaluate(exe_name, window_title)
-            sdl3.SDL_UpdateGamepads()
+            if self.systray:
+                self.systray.update()
             for pypad in self.pyropads.values():
                 pypad.update(time.time())
-            time.sleep(1.0 / self.poll_rate)
+            poll_ns = time.time_ns() - start_time
+            sdl3.SDL_DelayNS(ns_per_poll - poll_ns)
 
     def run(self):
         self.logger.info("PyroGyro Starting")
@@ -341,7 +347,6 @@ class PyroGyroMapper:
         self.refresh_autoload_mappings()
 
         try:
-            sdl3.SDL_Delay(1000)
             self.input_poll()
         except KeyboardInterrupt:
             pass

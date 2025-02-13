@@ -10,6 +10,7 @@ import sdl3
 import vgamepad as vg
 
 import pyrogyro
+from pyrogyro.constants import DEFAULT_POLL_RATE
 from pyrogyro.gamepad_motion import (
     GyroCalibration,
     gyro_camera_local,
@@ -142,7 +143,9 @@ class PyroGyroPad:
         sdl_joystick,
         mapping: Mapping | None = None,
         web_server: WebServer | None = None,
+        parent: typing.Union["PyroGyroMapper", None] = None,
     ):
+        self.parent = parent
         self.logger = logging.getLogger("PyroGyroPad")
         if not mapping:
             mapping = Mapping()
@@ -181,6 +184,13 @@ class PyroGyroPad:
         self.accel_vec = Vec3()
         self.leftover_vel = Vec2()
         self.paired_axis_event_sink = {}
+
+        self.touchpad_state = {}
+        self.touchpad_update = False
+
+    @property
+    def poll_rate(self):
+        return self.parent.poll_rate if self.parent else DEFAULT_POLL_RATE
 
     def cleanup(self):
         if self.vpad:
@@ -315,6 +325,7 @@ class PyroGyroPad:
         self.accel_vec.set_value(0, 0, 0)
         self.delta_time = 0.0
         self.gyro_update = False
+        self.touchpad_update = False
 
     def send_to_web_server(self, event, value):
         remap = {"l3": "lstick", "r3": "rstick"}
@@ -400,13 +411,17 @@ class PyroGyroPad:
                 sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
                 sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
             ):
+                self.touchpad_update = True
                 touch_event = sdl_event.gtouchpad
                 pad_id = touch_event.touchpad
                 finger_id = touch_event.finger
-                x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
-                self.logger.debug(
-                    f"pad {pad_id} finger {finger_id} moved to {x},{y} ({pressure})"
-                )
+                key_tuple = (pad_id, finger_id)
+                if sdl_event.type == sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
+                    if key_tuple in self.touchpad_state:
+                        self.touchpad_state.pop(key_tuple)
+                else:
+                    x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
+                    self.touchpad_state[key_tuple] = Vec2(x, y)
 
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
@@ -419,7 +434,9 @@ class PyroGyroPad:
                 if type(target) in MapDirectTargetTypes:
                     self.send_value(value, target, source=source)
                 else:
-                    complex_output_dict = target.map_to_outputs(
+                    complex_output_dict = resolve_outputs(
+                        dict(),
+                        target,
                         value,
                         delta_time=delta_time,
                         real_world_calibration=self.mapping.get_real_world_calibration(),
@@ -436,9 +453,13 @@ class PyroGyroPad:
         self.input_store.clear()
 
     def update(self, time_now: float):
+        delta_max = 5 / self.poll_rate
         if not self.last_timestamp:
             self.last_timestamp = time_now
         delta_time = time_now - self.last_timestamp
+        if delta_time > delta_max:
+            self.logger.debug(f"got delayed update clocking at {delta_time}")
+        delta_time = min(delta_max, delta_time)
         self.led.update(time_now)
         color = self.led.get_rgb_color()
         color_r, color_g, color_b = (
@@ -449,17 +470,20 @@ class PyroGyroPad:
         sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
         if self.gyro_update:
             self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
+            adjusted_delta = min(delta_max, self.delta_time)
             sensor_fusion_gravity(
-                self.gravity, self.gyro_vec, self.accel_vec, self.delta_time
+                self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
             )
             pixel_vel = self.mapping.gyro.mode.gyro_pixels(
                 self.gyro_vec,
                 self.gravity.normalized(),
-                self.delta_time,
+                adjusted_delta,
                 real_world_calibration=self.mapping.get_real_world_calibration(),
                 in_game_sens=self.mapping.get_in_game_sens(),
             )
             self.input_store.put_input(GyroSource.GYRO, pixel_vel)
+        if self.touchpad_update:
+            self.input_store.put_input(TouchSource.TOUCH, self.touchpad_state)
         self.send_changed_input_values(delta_time=delta_time)
         self.vpad.update()
         self.last_timestamp = time_now

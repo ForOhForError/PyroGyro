@@ -190,7 +190,10 @@ class GyroConfig:
         smooth_thresh *= delta_seconds
         half_thresh = smooth_thresh * 0.5
         sample_len = sample.length()
-        direct_weight = (sample_len - half_thresh) / (smooth_thresh - half_thresh)
+        if half_thresh != 0:
+            direct_weight = (sample_len - half_thresh) / half_thresh
+        else:
+            direct_weight = 0
         direct_weight = clamp(direct_weight, 0.0, 1.0)
         return (sample * direct_weight) + self.get_smoothed_gyro(
             sample * (1.0 - direct_weight)
@@ -202,7 +205,10 @@ class GyroConfig:
         threshold *= delta_seconds
         sample_len = sample.length()
         if sample_len < threshold:
-            input_scale = sample_len / threshold
+            if threshold == 0:
+                input_scale = 0
+            else:
+                input_scale = sample_len / threshold
             return sample * input_scale
         return sample
 

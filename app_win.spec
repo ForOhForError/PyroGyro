@@ -35,6 +35,7 @@ a = Analysis(
     binaries=[
         (path_vigem_client, '.'),
         (path_sdl / '*.dll', './sdl3/bin'),
+        (path_sdl / '*.json', './sdl3/bin'),
     ],
     datas=[
         ('res', 'res'),

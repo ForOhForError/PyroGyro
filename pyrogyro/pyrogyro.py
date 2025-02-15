@@ -198,13 +198,14 @@ class PyroGyroMapper:
             pyropad.set_gyro_calibrating(False)
 
     def handle_console_input(self, console_input: str):
-        match console_input:
-            case com if "calibrating".startswith(com.lower()):
-                self.calibrating = not self.calibrating
-                if self.calibrating:
-                    self.start_calibration()
-                else:
-                    self.end_calibration()
+        if console_input:
+            match console_input:
+                case com if "calibrate".startswith(com.lower()):
+                    self.calibrating = not self.calibrating
+                    if self.calibrating:
+                        self.start_calibration()
+                    else:
+                        self.end_calibration()
 
     def console_input_loop(self):
         try:

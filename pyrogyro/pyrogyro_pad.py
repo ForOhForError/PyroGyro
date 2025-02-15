@@ -459,7 +459,7 @@ class PyroGyroPad:
         delta_time = time_now - self.last_timestamp
         if delta_time > delta_max:
             self.logger.debug(f"got delayed update clocking at {delta_time}")
-        delta_time = min(delta_max, delta_time)
+            delta_time = 0
         self.led.update(time_now)
         color = self.led.get_rgb_color()
         color_r, color_g, color_b = (
@@ -470,7 +470,7 @@ class PyroGyroPad:
         sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
         if self.gyro_update:
             self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
-            adjusted_delta = min(delta_max, self.delta_time)
+            adjusted_delta = self.delta_time if self.delta_time <= delta_max else 0
             sensor_fusion_gravity(
                 self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
             )

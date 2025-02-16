@@ -1,4 +1,5 @@
 import collections.abc
+import logging
 import sys
 import typing
 
@@ -54,7 +55,9 @@ class AutoloadConfig(BaseModel):
         )
 
 
-_BasicMapping = collections.abc.Mapping[MapSource, MapTarget]
+_BasicMapping = collections.abc.Mapping[
+    MapSource, typing.Union[MapTarget, typing.Sequence[MapTarget]]
+]
 _BasicMappingOrListOfMappings = typing.Union[
     _BasicMapping, typing.Sequence[typing.Union[DetailedMapping, _BasicMapping]]
 ]
@@ -142,10 +145,27 @@ class Mapping(Layer):
     def get_os_mouse_speed_correction(self):
         return get_os_mouse_speed() if self.counter_os_mouse_speed else 1.0
 
+    def reset(self):
+        self._active_layers.clear()
+        self._stale = True
+
     @property
     def map(self):
         self.refresh_active_mapping()
         return self._active_mapping
+
+    def set_layer_activation(self, layer_name: str, active: bool):
+        if layer_name in self.layers:
+            if active:
+                if layer_name not in self._active_layers:
+                    logging.info(f"Activated layer {layer_name}")
+                    self._active_layers.add(layer_name)
+                    self._stale = True
+            else:
+                if layer_name in self._active_layers:
+                    logging.info(f"Deactivated layer {layer_name}")
+                    self._active_layers.remove(layer_name)
+                    self._stale = True
 
     def refresh_active_mapping(self):
         if self._stale:
@@ -160,7 +180,7 @@ class Mapping(Layer):
                 self._active_mapping.update(self.mapping)
             for layer in self.layers:
                 if layer in self._active_layers:
-                    self._active_mapping.update(self.layers[layer].map())
+                    self._active_mapping.update(self.layers[layer].map)
             self._stale = False
 
     def count_autoload_specificity(self):

@@ -278,17 +278,18 @@ class PyroGyroPad:
                 f"Applying mapping '{new_mapping.name}' to PyroGyro pad for controller '{controller_name}'"
             )
             self.mapping = new_mapping
+            self.mapping.reset()
 
     def set_gyro_calibrating(self, calibrating: bool):
         self.gyro_calibrating = calibrating
         if calibrating:
             self.gyro_calibration.reset()
 
-    def send_value(self, source_value, target_enum, source=None):
-        match type(target_enum):
+    def send_value(self, source_value, target, source=None):
+        match type(target):
             case pyrogyro.io_types.DoubleAxisTarget:
                 if isinstance(source_value, Vec2):
-                    match target_enum:
+                    match target:
                         case DoubleAxisTarget.X_LSTICK:
                             self.vpad.left_joystick_float(
                                 source_value.x, -source_value.y
@@ -299,26 +300,28 @@ class PyroGyroPad:
                             )
             case pyrogyro.io_types.SingleAxisTarget:
                 float_val = to_float(source_value)
-                match target_enum:
+                match target:
                     case SingleAxisTarget.X_L2:
                         self.vpad.left_trigger_float(float_val)
                     case SingleAxisTarget.X_R2:
                         self.vpad.right_trigger_float(float_val)
             case pyrogyro.io_types.ButtonTarget:
                 if to_bool(source_value):
-                    self.vpad.press_button(target_enum.value)
+                    self.vpad.press_button(target.value)
                 else:
-                    self.vpad.release_button(target_enum.value)
+                    self.vpad.release_button(target.value)
             case pyrogyro.io_types.KeyboardKeyTarget:
-                self.set_mkb_bool_state(target_enum, to_bool(source_value))
+                self.set_mkb_bool_state(target, to_bool(source_value))
             case pyrogyro.io_types.MouseButtonTarget:
-                self.set_mkb_bool_state(target_enum, to_bool(source_value))
+                self.set_mkb_bool_state(target, to_bool(source_value))
             case pyrogyro.io_types.MouseTarget:
                 if isinstance(source_value, Vec2):
-                    target_enum.move_mouse(
+                    target.move_mouse(
                         source_value.x,
                         source_value.y,
                     )
+            case pyrogyro.io_types.LayerTarget:
+                self.mapping.set_layer_activation(target.layer, bool(source_value))
 
     def on_poll_start(self):
         self.gyro_vec.set_value(0, 0, 0)
@@ -427,28 +430,33 @@ class PyroGyroPad:
         changed_inputs = self.input_store.get_inputs()
         for source in changed_inputs:
             value = changed_inputs.get(source)
-            target = self.mapping.map.get(source)
-            if target:
-                if isinstance(target, InputPreserver):
-                    self.input_store.set_preserved(source, target.preserve_input(value))
-                if type(target) in MapDirectTargetTypes:
-                    self.send_value(value, target, source=source)
-                else:
-                    complex_output_dict = resolve_outputs(
-                        dict(),
-                        target,
-                        value,
-                        delta_time=delta_time,
-                        real_world_calibration=self.mapping.get_real_world_calibration(),
-                        in_game_sens=self.mapping.get_in_game_sens(),
-                        os_mouse_speed=self.mapping.get_os_mouse_speed_correction(),
-                    )
-                    for mapped_output_key in complex_output_dict:
-                        self.send_value(
-                            complex_output_dict[mapped_output_key],
-                            mapped_output_key,
-                            source=source,
+            target_raw = self.mapping.map.get(source)
+            for target in (
+                target_raw if isinstance(target_raw, typing.Sequence) else (target_raw,)
+            ):
+                if target:
+                    if isinstance(target, InputPreserver):
+                        self.input_store.set_preserved(
+                            source, target.preserve_input(value)
                         )
+                    if type(target) in MapDirectTargetTypes:
+                        self.send_value(value, target, source=source)
+                    else:
+                        complex_output_dict = resolve_outputs(
+                            dict(),
+                            target,
+                            value,
+                            delta_time=delta_time,
+                            real_world_calibration=self.mapping.get_real_world_calibration(),
+                            in_game_sens=self.mapping.get_in_game_sens(),
+                            os_mouse_speed=self.mapping.get_os_mouse_speed_correction(),
+                        )
+                        for mapped_output_key in complex_output_dict:
+                            self.send_value(
+                                complex_output_dict[mapped_output_key],
+                                mapped_output_key,
+                                source=source,
+                            )
             self.send_to_web_server(source, value)
         self.input_store.clear()
 

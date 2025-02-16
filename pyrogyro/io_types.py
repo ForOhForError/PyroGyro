@@ -173,6 +173,14 @@ class DoubleAxisTarget(enum.Enum):
     )
 
 
+class LayerTarget(BaseModel):
+    map_as: typing.Literal["LAYER"]
+    layer: str
+
+    def __hash__(self):
+        return hash(self.name)
+
+
 class GyroSource(enum.Enum):
     GYRO = "GYRO"
 
@@ -203,6 +211,7 @@ MapDirectTarget = typing.Union[
     enum_or_by_name(DoubleAxisTarget),
     enum_or_by_name(MouseButtonTarget),
     enum_or_by_name(MouseTarget),
+    LayerTarget,
     None,
 ]
 MapDirectTargetTypes = (
@@ -213,6 +222,7 @@ MapDirectTargetTypes = (
     MouseButtonTarget,
     MouseTarget,
     types.NoneType,
+    LayerTarget,
 )
 
 

@@ -40,10 +40,6 @@ from pyrogyro.pyrogyro_pad import PyroGyroPad
 from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 
-SDL_EVENT_CALL = ctypes.CFUNCTYPE(
-    ctypes.c_bool, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_Event)
-)
-
 EVENT_TYPES_FILTER = set()
 
 EVENT_TYPES_IGNORE = set(
@@ -77,7 +73,7 @@ EVENT_TYPES_PASS_TO_PAD = set(
 )
 
 
-@SDL_EVENT_CALL
+@sdl3.SDL_EventFilter
 def event_filter(userdata, event):
     return not (event.contents.type in EVENT_TYPES_FILTER)
 

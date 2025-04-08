@@ -491,7 +491,7 @@ class PyroGyroPad:
             )
             self.input_store.put_input(GyroSource.GYRO, pixel_vel)
         if self.touchpad_update:
-            self.input_store.put_input(TouchSource.TOUCH, self.touchpad_state)
+            self.input_store.put_input(TouchSource.TOUCHPAD, self.touchpad_state)
         self.send_changed_input_values(delta_time=delta_time)
         self.vpad.update()
         self.last_timestamp = time_now

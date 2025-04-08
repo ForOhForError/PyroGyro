@@ -3,11 +3,6 @@ import threading
 
 import sdl3
 
-SDL_MENU_CALL = ctypes.CFUNCTYPE(
-    None, ctypes.c_void_p, ctypes.POINTER(sdl3.SDL_TrayEntry)
-)
-
-
 class SystemTray:
     def __init__(self, title: str, icon_path: str):
         self.title = title
@@ -40,7 +35,7 @@ class SystemTray:
         )
         entry = sdl3.SDL_InsertTrayEntryAt(self.menu, -1, option_text_p, entry_type)
         if callback:
-            callback = SDL_MENU_CALL(callback)
+            callback = sdl3.SDL_TrayCallback(callback)
             sdl3.SDL_SetTrayEntryCallback(entry, callback, userdata)
             self.callbacks[option_text] = callback
 

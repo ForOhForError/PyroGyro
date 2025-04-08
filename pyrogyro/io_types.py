@@ -123,7 +123,7 @@ class SDLButtonSource(enum.Enum):
     LP1 = sdl3.SDL_GAMEPAD_BUTTON_LEFT_PADDLE1
     RP2 = sdl3.SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2
     LP2 = sdl3.SDL_GAMEPAD_BUTTON_LEFT_PADDLE2
-    TOUCHPAD = sdl3.SDL_GAMEPAD_BUTTON_TOUCHPAD
+    TOUCHPAD_PRESS = sdl3.SDL_GAMEPAD_BUTTON_TOUCHPAD
     M2 = sdl3.SDL_GAMEPAD_BUTTON_MISC2
     M3 = sdl3.SDL_GAMEPAD_BUTTON_MISC3
     M4 = sdl3.SDL_GAMEPAD_BUTTON_MISC4
@@ -186,8 +186,10 @@ class GyroSource(enum.Enum):
 
 
 class TouchSource(enum.Enum):
-    TOUCH = "TOUCH"
+    TOUCHPAD = "TOUCHPAD"
 
+class PathSource(BaseModel):
+    path: str
 
 Vec2Source = typing.Union[enum_or_by_name(DoubleAxisSource), GyroSource]
 FloatSource = typing.Union[enum_or_by_name(SingleAxisSource)]
@@ -203,6 +205,7 @@ def get_double_source_for_axis(single_axis_source):
 
 
 MapDirectSource = typing.Union[Vec2Source, FloatSource, BinarySource, DictSource]
+ComboableSource = typing.Union[MapDirectSource, PathSource]
 
 MapDirectTarget = typing.Union[
     enum_or_by_name(KeyboardKeyTarget),
@@ -234,6 +237,7 @@ def resolve_outputs(
     real_world_calibration=1.0,
     in_game_sens=1.0,
     os_mouse_speed=1.0,
+    **kwargs
 ):
     if type(target) in MapDirectTargetTypes:
         resolve_dict[target] = value
@@ -253,6 +257,7 @@ def resolve_outputs(
                 real_world_calibration=real_world_calibration,
                 in_game_sens=in_game_sens,
                 os_mouse_speed=os_mouse_speed,
+                **kwargs
             )
     return resolve_dict
 
@@ -409,7 +414,6 @@ class AsDpad(BaseModel):
                         outputs[out] = False
         return outputs
 
-
 class AsGridSticks(BaseModel):
     map_as: typing.Literal["GRID_STICKS"]
     pad_fingers: typing.Optional[
@@ -447,15 +451,23 @@ class AsGridSticks(BaseModel):
                             resolve_outputs(outputs, target, result, **kwargs)
         return outputs
 
+class ComboSource(BaseModel):
+    combo: typing.Sequence[ComboableSource]
+    tap_combo: bool = False
+    combo_window: float = 40/1000
+    
+    def __hash__(self):
+        return hash(self.combo+(self.tap_combo, self.combo_window))
+    
+    def get_value(self, input_sequence):
+        return False
 
 MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad, AsAim, AsGridSticks]
-MapSource = MapDirectSource
-
+MapSource = typing.Union[MapDirectSource, ComboSource]
 
 class DetailedMapping(BaseModel):
-    i: MapSource
-    o: MapTarget
-    on: str
+    input: MapSource
+    output: MapTarget
 
 
 def to_float(in_val):

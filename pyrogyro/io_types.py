@@ -188,8 +188,10 @@ class GyroSource(enum.Enum):
 class TouchSource(enum.Enum):
     TOUCHPAD = "TOUCHPAD"
 
+
 class PathSource(BaseModel):
     path: str
+
 
 Vec2Source = typing.Union[enum_or_by_name(DoubleAxisSource), GyroSource]
 FloatSource = typing.Union[enum_or_by_name(SingleAxisSource)]
@@ -414,6 +416,7 @@ class AsDpad(BaseModel):
                         outputs[out] = False
         return outputs
 
+
 class AsGridSticks(BaseModel):
     map_as: typing.Literal["GRID_STICKS"]
     pad_fingers: typing.Optional[
@@ -451,19 +454,22 @@ class AsGridSticks(BaseModel):
                             resolve_outputs(outputs, target, result, **kwargs)
         return outputs
 
+
 class ComboSource(BaseModel):
     combo: typing.Sequence[ComboableSource]
     tap_combo: bool = False
-    combo_window: float = 40/1000
-    
+    combo_window: float = 40 / 1000
+
     def __hash__(self):
-        return hash(self.combo+(self.tap_combo, self.combo_window))
-    
+        return hash(tuple(self.combo + [self.tap_combo, self.combo_window]))
+
     def get_value(self, input_sequence):
         return False
 
+
 MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad, AsAim, AsGridSticks]
 MapSource = typing.Union[MapDirectSource, ComboSource]
+
 
 class DetailedMapping(BaseModel):
     input: MapSource

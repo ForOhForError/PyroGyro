@@ -3,6 +3,7 @@ import threading
 
 import sdl3
 
+
 class SystemTray:
     def __init__(self, title: str, icon_path: str):
         self.title = title

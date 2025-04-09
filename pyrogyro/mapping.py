@@ -9,6 +9,7 @@ from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 from pyrogyro.gamepad_motion import GyroConfig, GyroMode
 from pyrogyro.io_types import (
     ButtonTarget,
+    ComboSource,
     DetailedMapping,
     DoubleAxisSource,
     DoubleAxisTarget,
@@ -69,7 +70,6 @@ class Layer(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._combo_map = {}
         self._active_mapping = {}
         self._stale = True
 
@@ -85,23 +85,19 @@ class Layer(BaseModel):
             if isinstance(self.mapping, typing.Sequence):
                 for entry in self.mapping:
                     if isinstance(entry, DetailedMapping):
-                        pass
+                        self._active_mapping[entry.input] = entry.output
                     else:
                         self._active_mapping.update(entry)
             else:
                 self._active_mapping.update(self.mapping)
             self._stale = False
 
-    def add_mapping(self, source: MapSource, button_out: MapTarget):
-        self.map[source] = MapTarget
-        self._update_combo_mappings()
-
-    def _update_combo_mappings(self):
-        combo_map = {}
-        for key in self.map.keys():
-            if isinstance(key, typing.Sequence):
-                combo_map[key] = self.map[key]
-        self._combo_map = combo_map
+    def combo_entries(self):
+        return {
+            key: value
+            for (key, value) in self.map.items()
+            if isinstance(key, ComboSource)
+        }
 
     def _valid_for_combo(self, source: MapSource) -> bool:
         for combo_key in self._combo_map:
@@ -173,7 +169,8 @@ class Mapping(Layer):
             if isinstance(self.mapping, typing.Sequence):
                 for entry in self.mapping:
                     if isinstance(entry, DetailedMapping):
-                        pass
+                        if isinstance(entry, DetailedMapping):
+                            self._active_mapping[entry.input] = entry.output
                     else:
                         self._active_mapping.update(entry)
             else:

@@ -8,7 +8,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14"
-pysdl3 = "0.9.7b9"
+pysdl3 = "0.9.8b1"
 vgamepad = "^0.1.0"
 pyautogui = "^0.9.54"
 flask = "^3.1.0"

@@ -8,8 +8,8 @@ from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
 from pyrogyro.gamepad_motion import GyroConfig, GyroMode
 from pyrogyro.io_types import (
+    AndTarget,
     ButtonTarget,
-    ComboSource,
     DetailedMapping,
     DoubleAxisSource,
     DoubleAxisTarget,
@@ -91,19 +91,6 @@ class Layer(BaseModel):
             else:
                 self._active_mapping.update(self.mapping)
             self._stale = False
-
-    def combo_entries(self):
-        return {
-            key: value
-            for (key, value) in self.map.items()
-            if isinstance(key, ComboSource)
-        }
-
-    def _valid_for_combo(self, source: MapSource) -> bool:
-        for combo_key in self._combo_map:
-            if source in combo_key:
-                return True
-        return False
 
 
 _MAPPING_FIELD_ORDER = (

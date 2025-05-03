@@ -279,7 +279,6 @@ class PyroGyroPad:
             )
             self.mapping = new_mapping
             self.mapping.reset()
-            self.logger.info(f"combo entries: {self.mapping.combo_entries()}")
 
     def set_gyro_calibrating(self, calibrating: bool):
         self.gyro_calibrating = calibrating

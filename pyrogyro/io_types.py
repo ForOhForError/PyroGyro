@@ -189,10 +189,6 @@ class TouchSource(enum.Enum):
     TOUCHPAD = "TOUCHPAD"
 
 
-class PathSource(BaseModel):
-    path: str
-
-
 Vec2Source = typing.Union[enum_or_by_name(DoubleAxisSource), GyroSource]
 FloatSource = typing.Union[enum_or_by_name(SingleAxisSource)]
 BinarySource = typing.Union[enum_or_by_name(SDLButtonSource)]
@@ -207,7 +203,7 @@ def get_double_source_for_axis(single_axis_source):
 
 
 MapDirectSource = typing.Union[Vec2Source, FloatSource, BinarySource, DictSource]
-ComboableSource = typing.Union[MapDirectSource, PathSource]
+ComboableSource = typing.Union[MapDirectSource]
 
 MapDirectTarget = typing.Union[
     enum_or_by_name(KeyboardKeyTarget),
@@ -273,6 +269,16 @@ class MapComplexTarget(BaseModel):
 
 
 ZERO_VEC2 = Vec2()
+
+
+class AndTarget(BaseModel):
+    AND: MapDirectTarget
+
+    def map_to_outputs(self, input_value, **kwargs):
+        if to_bool(input_value):
+            return resolve_outputs({}, self.AND, input_value, **kwargs)
+        else:
+            return {}
 
 
 class AsAim(InputPreserver, BaseModel):
@@ -455,20 +461,10 @@ class AsGridSticks(BaseModel):
         return outputs
 
 
-class ComboSource(BaseModel):
-    combo: typing.Sequence[ComboableSource]
-    tap_combo: bool = False
-    combo_window: float = 40 / 1000
-
-    def __hash__(self):
-        return hash(tuple(self.combo + [self.tap_combo, self.combo_window]))
-
-    def get_value(self, input_sequence):
-        return False
-
-
-MapTarget = typing.Union[MapDirectTarget, MapComplexTarget, AsDpad, AsAim, AsGridSticks]
-MapSource = typing.Union[MapDirectSource, ComboSource]
+MapTarget = typing.Union[
+    MapDirectTarget, MapComplexTarget, AsDpad, AsAim, AsGridSticks, AndTarget
+]
+MapSource = typing.Union[MapDirectSource]
 
 
 class DetailedMapping(BaseModel):

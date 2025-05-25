@@ -16,7 +16,6 @@ EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
 )
 
-
 def enum_or_by_name(T):
     def constructed_by_object_or_name(v: str | T) -> T:
         if isinstance(v, T):
@@ -489,3 +488,22 @@ def to_bool(in_val):
     if isinstance(in_val, float):
         return True if abs(in_val) >= 0.01 else False
     return bool(in_val)
+
+class EventType(enum.Enum):
+    PRESS = enum.auto()
+    HOLD = enum.auto()
+    UPDATE = enum.auto()
+    RELEASE = enum.auto()
+
+class InputEvent:
+    def __init__(self, source:MapSource, event_type:EventType, value: typing.Any, timestamp:float = 0):
+        self.source = source
+        self.event_type = event_type
+        self.value = value
+        self.timestamp = timestamp
+        self.deferred_event = False
+        self.defer_until: float = 0
+
+    def defer_event(self, defer_timestamp:float):
+        self.deferred_event = True
+        self.defer_until = defer_timestamp

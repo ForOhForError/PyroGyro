@@ -28,16 +28,25 @@ def main():
         win_name,
         screen_width,
         screen_height,
-        SDL_WINDOW_BORDERLESS | SDL_WINDOW_TRANSPARENT | SDL_WINDOW_ALWAYS_ON_TOP,
+        SDL_WINDOW_BORDERLESS \
+        | SDL_WINDOW_TRANSPARENT \
+        | SDL_WINDOW_ALWAYS_ON_TOP,
     )
-    # shape = SDL_CreateSurface(screen_width, screen_height, SDL_PIXELFORMAT_RGBA8888)
+    
+    renderer = SDL_CreateRenderer(window, win_name);
+    shape = SDL_CreateSurface(screen_width, screen_height, SDL_PIXELFORMAT_RGBA8888)
     screen_surface = SDL_GetWindowSurface(window)
-    # gHelloWorld = SDL_LoadBMP( b"res/test.bmp" )
+    gHelloWorld = SDL_LoadBMP( b"res/test.bmp" )
     SDL_BlitSurface(gHelloWorld, None, screen_surface, None)
-    # SDL_HideWindow(window)
+    SDL_FillSurfaceRect(shape, boxptr, 0xFFFFFFFF);
+    SDL_FillSurfaceRect(shape, boxptr_inner, 0x00000000);
+    tex = SDL_CreateTextureFromSurface(renderer, shape);
+    SDL_RenderTexture(renderer, tex, None, None)
     SDL_SetWindowShape(window, screen_surface)
     SDL_UpdateWindowSurface(window)
-    # SDL_ShowWindow(window)
+    
+    #SDL_HideWindow(window)
+    #SDL_ShowWindow(window)
 
     start = time.time()
     run = True
@@ -48,6 +57,7 @@ def main():
             while SDL_PollEvent(event):
                 pass
             SDL_Delay(100)
+            
     except KeyboardInterrupt:
         pass
     SDL_Quit()

@@ -31,7 +31,7 @@ from pyrogyro.constants import (
 )
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
-from pyrogyro.platform import (
+from pyrogyro.platform_util import (
     init_window_listener,
     set_console_title,
     set_console_visibility,

@@ -226,6 +226,12 @@ MapDirectTargetTypes = (
     LayerTarget,
 )
 
+BasicMapping = collections.abc.Mapping[
+    "MapSource", typing.Union["MapTarget", typing.Sequence["MapTarget"]]
+]
+BasicMappingOrListOfMappings = typing.Union[
+    BasicMapping, typing.Sequence[typing.Union["DetailedMapping", BasicMapping]]
+]
 
 def resolve_outputs(
     resolve_dict,
@@ -272,9 +278,10 @@ ZERO_VEC2 = Vec2()
 
 
 class AndTarget(BaseModel):
-    AND: MapDirectTarget
+    AND: BasicMappingOrListOfMappings
 
     def map_to_outputs(self, input_value, **kwargs):
+        print(dir(self))
         if to_bool(input_value):
             return resolve_outputs({}, self.AND, input_value, **kwargs)
         else:

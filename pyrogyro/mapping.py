@@ -10,6 +10,8 @@ from pyrogyro.gamepad_motion import GyroConfig, GyroMode
 from pyrogyro.io_types import (
     AndTarget,
     ButtonTarget,
+    BasicMapping,
+    BasicMappingOrListOfMappings,
     DetailedMapping,
     DoubleAxisSource,
     DoubleAxisTarget,
@@ -56,16 +58,8 @@ class AutoloadConfig(BaseModel):
         )
 
 
-_BasicMapping = collections.abc.Mapping[
-    MapSource, typing.Union[MapTarget, typing.Sequence[MapTarget]]
-]
-_BasicMappingOrListOfMappings = typing.Union[
-    _BasicMapping, typing.Sequence[typing.Union[DetailedMapping, _BasicMapping]]
-]
-
-
 class Layer(BaseModel):
-    mapping: _BasicMappingOrListOfMappings = Field(default_factory=CommentedMap)
+    mapping: BasicMappingOrListOfMappings = Field(default_factory=CommentedMap)
     gyro: GyroMapping = Field(default_factory=GyroMapping)
 
     def __init__(self, *args, **kwargs):

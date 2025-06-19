@@ -13,16 +13,12 @@ import pyrogyro
 from pyrogyro.constants import DEFAULT_POLL_RATE
 from pyrogyro.gamepad_motion import (
     GyroCalibration,
-    gyro_camera_local,
-    gyro_camera_local_ow,
-    gyro_camera_player_lean,
-    gyro_camera_player_turn,
-    gyro_camera_world,
     sensor_fusion_gravity,
 )
 from pyrogyro.io_types import *
-from pyrogyro.mapping import AutoloadConfig, Mapping
+from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
+import pyrogyro.pyrogyro
 from pyrogyro.web import WebServer
 
 ROYGBIV = (
@@ -47,36 +43,18 @@ class ColorSpace(enum.Enum):
 
 @dataclass
 class InputStore:
-    _inputs: typing.Mapping[BinarySource, typing.Union[Vec2, float, bool]] = field(
-        default_factory=dict
-    )
-    _changed: typing.Set[MapDirectSource] = field(default_factory=set)
-    _preserved: typing.Set[MapDirectSource] = field(default_factory=set)
+    _inputs: typing.List[InputEvent] = field(default_factory=list)
 
     def put_input(
-        self, source: MapDirectSource, value: typing.Union[Vec2, float, bool]
+        self, input_event:InputEvent
     ):
-        self._inputs[source] = value
-        self._changed.add(source)
+        self._inputs.append(input_event)
 
     def get_inputs(self):
-        out = {}
-        for key in self._changed:
-            val = self._inputs[key]
-            out[key] = val
-        return out
-
-    def set_preserved(self, source: MapDirectSource, preserved: bool):
-        if preserved:
-            if source not in self._preserved:
-                self._preserved.add(source)
-        else:
-            if source in self._preserved:
-                self._preserved.remove(source)
+        return self._inputs
 
     def clear(self):
-        self._changed.clear()
-        self._changed |= self._preserved
+        self._inputs.clear()
 
 
 @dataclass
@@ -143,7 +121,7 @@ class PyroGyroPad:
         sdl_joystick,
         mapping: Mapping | None = None,
         web_server: WebServer | None = None,
-        parent: typing.Union["PyroGyroMapper", None] = None,
+        parent: typing.Union["pyrogyro.pyrogyro.PyroGyroMapper", None] = None,
     ):
         self.parent = parent
         self.logger = logging.getLogger("PyroGyroPad")
@@ -286,8 +264,8 @@ class PyroGyroPad:
             self.gyro_calibration.reset()
 
     def send_value(self, source_value, target, source=None):
-        match type(target):
-            case pyrogyro.io_types.DoubleAxisTarget:
+        match target:
+            case DoubleAxisTarget():
                 if isinstance(source_value, Vec2):
                     match target:
                         case DoubleAxisTarget.X_LSTICK:
@@ -298,29 +276,29 @@ class PyroGyroPad:
                             self.vpad.right_joystick_float(
                                 source_value.x, -source_value.y
                             )
-            case pyrogyro.io_types.SingleAxisTarget:
+            case SingleAxisTarget():
                 float_val = to_float(source_value)
                 match target:
                     case SingleAxisTarget.X_L2:
                         self.vpad.left_trigger_float(float_val)
                     case SingleAxisTarget.X_R2:
                         self.vpad.right_trigger_float(float_val)
-            case pyrogyro.io_types.ButtonTarget:
+            case ButtonTarget():
                 if to_bool(source_value):
                     self.vpad.press_button(target.value)
                 else:
                     self.vpad.release_button(target.value)
-            case pyrogyro.io_types.KeyboardKeyTarget:
+            case KeyboardKeyTarget():
                 self.set_mkb_bool_state(target, to_bool(source_value))
-            case pyrogyro.io_types.MouseButtonTarget:
+            case MouseButtonTarget():
                 self.set_mkb_bool_state(target, to_bool(source_value))
-            case pyrogyro.io_types.MouseTarget:
+            case MouseTarget():
                 if isinstance(source_value, Vec2):
                     target.move_mouse(
                         source_value.x,
                         source_value.y,
                     )
-            case pyrogyro.io_types.LayerTarget:
+            case LayerTarget():
                 self.mapping.set_layer_activation(target.layer, bool(source_value))
 
     def on_poll_start(self):
@@ -363,12 +341,15 @@ class PyroGyroPad:
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
-                self.input_store.put_input(enum_val, button_event.down)
+                pyro_event = InputEvent(enum_val, EventType.PRESS if button_event.down else EventType.RELEASE, button_event.down, timestamp=timestamp)
+                self.input_store.put_input(pyro_event)
             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
+                timestamp = int(axis_event.timestamp)
                 axis_id = axis_event.axis
                 enum_val = SingleAxisSource(axis_id)
-                self.input_store.put_input(enum_val, axis_event.value / 32768.0)
+                pyro_event = InputEvent(enum_val, EventType.UPDATE, axis_event.value / 32768.0, timestamp=timestamp)
+                self.input_store.put_input(pyro_event)
 
                 double_enum = get_double_source_for_axis(enum_val)
                 if double_enum:
@@ -387,7 +368,8 @@ class PyroGyroPad:
                             target_value = Vec2(this_value, other_value)
                         else:
                             target_value = Vec2(other_value, this_value)
-                        self.input_store.put_input(double_enum, target_value)
+                        paired_event = InputEvent(double_enum, EventType.UPDATE, target_value, timestamp=timestamp)
+                        self.input_store.put_input(paired_event)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
                 sensor_type = sensor_event.sensor
@@ -428,19 +410,15 @@ class PyroGyroPad:
 
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
-        for source in changed_inputs:
-            value = changed_inputs.get(source)
-            target_raw = self.mapping.map.get(source)
+        for event in changed_inputs:
+            value = event.value
+            target_raw = self.mapping.map.get(event.source)
             for target in (
                 target_raw if isinstance(target_raw, typing.Sequence) else (target_raw,)
             ):
                 if target:
-                    if isinstance(target, InputPreserver):
-                        self.input_store.set_preserved(
-                            source, target.preserve_input(value)
-                        )
                     if type(target) in MapDirectTargetTypes:
-                        self.send_value(value, target, source=source)
+                        self.send_value(value, target, source=event.source)
                     else:
                         complex_output_dict = resolve_outputs(
                             dict(),
@@ -455,9 +433,9 @@ class PyroGyroPad:
                             self.send_value(
                                 complex_output_dict[mapped_output_key],
                                 mapped_output_key,
-                                source=source,
+                                source=event.source,
                             )
-            self.send_to_web_server(source, value)
+            self.send_to_web_server(event.source, value)
         self.input_store.clear()
 
     def update(self, time_now: float):
@@ -489,9 +467,11 @@ class PyroGyroPad:
                 real_world_calibration=self.mapping.get_real_world_calibration(),
                 in_game_sens=self.mapping.get_in_game_sens(),
             )
-            self.input_store.put_input(GyroSource.GYRO, pixel_vel)
+            pyro_event = InputEvent(GyroSource.GYRO, EventType.UPDATE, pixel_vel)
+            self.input_store.put_input(pyro_event)
         if self.touchpad_update:
-            self.input_store.put_input(TouchSource.TOUCHPAD, self.touchpad_state)
+            pyro_event = InputEvent(TouchSource.TOUCHPAD, EventType.UPDATE, self.touchpad_state)
+            self.input_store.put_input(pyro_event)
         self.send_changed_input_values(delta_time=delta_time)
         self.vpad.update()
         self.last_timestamp = time_now

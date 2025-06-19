@@ -34,14 +34,14 @@ match SYSTEM:
             leftover_y = vel_y % sign(vel_y)
             return leftover_x, leftover_y
 
-        def set_console_title(title: str):
+        def set_console_title(title: str): # type: ignore
             kernel32.SetConsoleTitleW(title)
 
         def set_console_visibility(visibility: bool):
             hWnd = kernel32.GetConsoleWindow()
             user32.ShowWindow(hWnd, 1 if visibility else 0)
 
-        def init_window_listener(on_focus_change):
+        def init_window_listener(on_focus_change): # type: ignore
             window_listener = WindowChangeEventListener(callback=on_focus_change)
             window_listener.listen_in_thread()
             return window_listener

@@ -8,22 +8,19 @@ from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
 from pyrogyro.gamepad_motion import GyroConfig, GyroMode
 from pyrogyro.io_types import (
-    AndTarget,
     ButtonTarget,
-    BasicMapping,
+    MapSource,
+    MapTarget,
     BasicMappingOrListOfMappings,
     DetailedMapping,
     DoubleAxisSource,
     DoubleAxisTarget,
-    MapComplexTarget,
-    MapSource,
-    MapTarget,
     SDLButtonSource,
     SingleAxisSource,
     SingleAxisTarget,
     enum_or_by_name,
 )
-from pyrogyro.platform import get_os_mouse_speed
+from pyrogyro.platform_util import get_os_mouse_speed
 
 yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
@@ -213,8 +210,8 @@ def get_default_xbox_mapping():
                 SingleAxisSource.R2: SingleAxisTarget.X_R2,
                 DoubleAxisSource.LSTICK: DoubleAxisTarget.X_LSTICK,
                 DoubleAxisSource.RSTICK: DoubleAxisTarget.X_RSTICK,
-            }
-        ),
+            } # type: ignore
+        ), # type: ignore
     )
 
 

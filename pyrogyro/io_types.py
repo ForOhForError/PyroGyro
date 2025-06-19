@@ -1,6 +1,6 @@
 import collections.abc
 import enum
-import logging
+import time
 import types
 import typing
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, BeforeValidator, PlainSerializer
 from vgamepad import DS4_BUTTONS, XUSB_BUTTON
 
 from pyrogyro.math import *
-from pyrogyro.platform import keyDown, keyUp, mouseDown, mouseUp, move_mouse
+from pyrogyro.platform_util import keyDown, keyUp, mouseDown, mouseUp, move_mouse
 
 EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
@@ -29,27 +29,18 @@ def enum_or_by_name(T):
         T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
     ]
 
-
-class InputPreserver:
-    def preserve_input(self, input_val=None):
-        return True
-
-
-KeyboardKeyTarget = enum.Enum(
-    "KeyboardKeyTarget", {key.upper(): key for key in KEYBOARD_KEYS}
+KeyboardKeyEnum = enum.Enum(
+    "KeyboardKeyEnum", {key.upper(): key for key in KEYBOARD_KEYS}
 )
 
+class KeyboardKeyTarget(enum.Enum):
+    def up(self):
+        keyUp(self.value)
 
-def up(key: KeyboardKeyTarget):
-    keyUp(key.value)
+    def down(self):
+        keyDown(self.value)
 
-
-def down(key: KeyboardKeyTarget):
-    keyDown(key.value)
-
-
-setattr(KeyboardKeyTarget, "up", up)
-setattr(KeyboardKeyTarget, "down", down)
+KeyboardKeyTarget._member_map_.update(KeyboardKeyEnum._member_map_)
 
 
 class ButtonTarget(enum.Enum):
@@ -70,7 +61,7 @@ class ButtonTarget(enum.Enum):
     X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
 
-class MouseTarget(InputPreserver, enum.Enum):
+class MouseTarget(enum.Enum):
     MOUSE = "MOUSE"
 
     def __init__(self, *args, **kwargs):
@@ -81,11 +72,6 @@ class MouseTarget(InputPreserver, enum.Enum):
         self._leftover_vel.set_value(
             *move_mouse(x, y, self._leftover_vel.x, self._leftover_vel.y)
         )
-
-    def preserve_input(self, input_val=None):
-        if isinstance(input_val, Vec2) and input_val.length() > 0.01:
-            return True
-        return False
 
 
 class MouseButtonTarget(enum.Enum):
@@ -177,7 +163,7 @@ class LayerTarget(BaseModel):
     layer: str
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.layer)
 
 
 class GyroSource(enum.Enum):
@@ -287,7 +273,7 @@ class AndTarget(BaseModel):
             return {}
 
 
-class AsAim(InputPreserver, BaseModel):
+class AsAim(BaseModel):
     map_as: typing.Literal["AIM"]
     o: "MapTarget"
     sens: typing.Union[float, typing.Tuple[float, float]] = 360.0
@@ -314,17 +300,14 @@ class AsAim(InputPreserver, BaseModel):
         progress = magnitude**self.power
         return Vec2.lerp(ZERO_VEC2, input_vec.normalized(), progress)
 
-    def preserve_input(self, input_val=None):
-        if isinstance(input_val, Vec2) and input_val.length() > 0.01:
-            return True
-        return False
-
     @property
     def sens_vec(self):
-        if isinstance(self.sens, float):
+        if isinstance(self.sens, float) or isinstance(self.sens, int):
             return Vec2(self.sens, self.sens)
-        else:
+        elif isinstance(self.sens, tuple):
             return Vec2(*self.sens)
+        else:
+            return ZERO_VEC2
 
     def get_velocity_vec(
         self,
@@ -496,14 +479,22 @@ class EventType(enum.Enum):
     RELEASE = enum.auto()
 
 class InputEvent:
-    def __init__(self, source:MapSource, event_type:EventType, value: typing.Any, timestamp:float = 0):
+    def __init__(self, source:MapSource, event_type:EventType, value: typing.Any, timestamp:int = 0):
         self.source = source
         self.event_type = event_type
         self.value = value
         self.timestamp = timestamp
         self.deferred_event = False
-        self.defer_until: float = 0
+        self.defer_until: int = 0
 
-    def defer_event(self, defer_timestamp:float):
+    def defer_event(self, defer_timestamp:int):
         self.deferred_event = True
         self.defer_until = defer_timestamp
+    
+    def is_processable(self, now: int|None=None):
+        if not now:
+            now = time.monotonic_ns()
+        if self.deferred_event:
+            return now >= self.defer_until
+        else:
+            return True

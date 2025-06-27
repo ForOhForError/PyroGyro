@@ -4,7 +4,7 @@ import zipfile
 import tempfile
 import subprocess
 from pathlib import Path
-from os import getenv
+from os import getenv, unlink, environ
 import base64
 
 VAR_B64_ENCODED_CERT = "B64_ENCODED_CERT"
@@ -18,10 +18,11 @@ def build_windows_dist():
 
     b64_cert, cert_pw = getenv(VAR_B64_ENCODED_CERT), getenv(VAR_CERT_PASSWORD)
     if b64_cert and cert_pw:
-        with tempfile.NamedTemporaryFile(suffix=".pfx") as fp:
-            fp.write(base64.standard_b64decode(b64_cert))
-            fp.flush()
-            subprocess.run(["signtool", "/f", fp.name, "/p", cert_pw, "/fd", "SHA256", "/tr", "http://timestamp.digicert.com", "/td", "SHA256", "dist/pyrogyro/pyrogyro.exe"])
+        fp = tempfile.NamedTemporaryFile(suffix=".pfx", delete=False)
+        fp.write(base64.standard_b64decode(b64_cert))
+        fp.close()
+        subprocess.run(["signtool", "sign", "/f", fp.name, "/p", cert_pw, "/fd", "SHA256", "/tr", "http://timestamp.digicert.com", "/td", "SHA256", "dist/pyrogyro/pyrogyro.exe"])
+        unlink(fp.name)
 
     with zipfile.ZipFile("dist/pyrogyro.zip", "w", zipfile.ZIP_BZIP2) as zip_file:
         dist_dir = Path("dist/pyrogyro")

@@ -9,6 +9,9 @@ jobs:
     runs-on: windows-latest
     environment: Build Settings
     steps:
+      - name: Install winget
+        shell: pwsh
+        run: Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
       - name: Install signtool
         shell: pwsh
         run: winget install Microsoft.Azure.TrustedSigningClientTools

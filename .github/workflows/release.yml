@@ -33,8 +33,8 @@ jobs:
         run: $path = Join-Path $(poetry env info --path) "Lib\site-packages\vgamepad\win\vigem\install\x64\ViGEmBusSetup_x64.msi"; Start-Process $path /passive -Wait
       - name: Build
         env:
-          - B64_ENCODED_CERT: ${{ secrets.SIGNING_CERT }}
-          - CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+          B64_ENCODED_CERT: ${{ secrets.SIGNING_CERT }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
         run: poetry run dist
       - name: Upload Release Asset
         id: upload-release-asset 

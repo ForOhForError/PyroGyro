@@ -68,6 +68,7 @@ exe = EXE(
     entitlements_file=None,
     clean=True,
     icon='res/pyrogyro2.ico',
+    version="version.txt",
 )
 coll = COLLECT(
     exe,

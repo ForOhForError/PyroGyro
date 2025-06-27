@@ -6,8 +6,12 @@ name: Handle Release
 jobs:
   generate:
     name: Create release-artifacts
-    runs-on: windows-latest
+    runs-on: Build Settings
+    environment: production
     steps:
+      - name: Install signtool
+        shell: pwsh
+        run: winget install Microsoft.Azure.TrustedSigningClientTools
       - name: Make fake registry key for vigem bus
         shell: pwsh
         run: New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ViGEMBus'
@@ -28,6 +32,9 @@ jobs:
         shell: pwsh
         run: $path = Join-Path $(poetry env info --path) "Lib\site-packages\vgamepad\win\vigem\install\x64\ViGEmBusSetup_x64.msi"; Start-Process $path /passive -Wait
       - name: Build
+        env:
+          - B64_ENCODED_CERT: ${{ secrets.SIGNING_CERT }}
+          - CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
         run: poetry run dist
       - name: Upload Release Asset
         id: upload-release-asset 

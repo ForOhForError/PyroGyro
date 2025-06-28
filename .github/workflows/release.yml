@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Install signtool
         shell: pwsh
-        run: winget install Microsoft.Azure.TrustedSigningClientTools
+        run: winget install Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements
       - name: Make fake registry key for vigem bus
         shell: pwsh
         run: New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ViGEMBus'

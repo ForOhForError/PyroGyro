@@ -17,7 +17,7 @@ jobs:
         run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements
       - name: Add signtool to github path
         shell: pwsh
-        run: Get-ChildItem C:\WinDDK\*\bin\amd64 | Select-Object -Property FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
+        run: Get-ChildItem D:\WinDDK\*\bin\amd64 | Select-Object -Property FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
       - name: Make fake registry key for vigem bus
         shell: pwsh
         run: New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ViGEMBus'

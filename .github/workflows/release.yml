@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: info
         shell: pwsh
-        run: dir
+        run: Get-Location | Write-Host
       - name: Install signtool
         shell: pwsh
         run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements

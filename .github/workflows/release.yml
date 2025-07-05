@@ -1,7 +1,7 @@
 on:
   release:
     types: [created]
-
+  workflow_dispatch:
 name: Handle Release
 jobs:
   generate:
@@ -9,6 +9,9 @@ jobs:
     runs-on: windows-2025
     environment: Build Settings
     steps:
+      - name: info
+        shell: pwsh
+        run: dir
       - name: Install signtool
         shell: pwsh
         run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements

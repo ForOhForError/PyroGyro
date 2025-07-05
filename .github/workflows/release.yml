@@ -11,13 +11,13 @@ jobs:
     steps:
       - name: info
         shell: pwsh
-        run: Get-Location | Write-Host; dir D:\\
+        run: Get-Location | Write-Host; dir D:\\; dir C:\
       - name: Install signtool
         shell: pwsh
         run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements
       - name: info
         shell: pwsh
-        run: Get-Location | Write-Host; dir D:\
+        run: Get-Location | Write-Host; dir D:\; dir C:\
       - name: Add signtool to github path
         shell: pwsh
         run: Get-ChildItem D:\WinDDK\*\bin\amd64 | Select-Object -Property FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8

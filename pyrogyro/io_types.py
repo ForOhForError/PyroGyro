@@ -29,19 +29,16 @@ def enum_or_by_name(T):
         T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
     ]
 
-KeyboardKeyEnum = enum.Enum(
-    "KeyboardKeyEnum", {key.upper(): key for key in KEYBOARD_KEYS}
-)
-
-class KeyboardKeyTarget(enum.Enum):
+class Keynum:
     def up(self):
-        keyUp(self.value)
+        keyUp(self.value) # type: ignore
 
     def down(self):
-        keyDown(self.value)
+        keyDown(self.value) # type: ignore
 
-KeyboardKeyTarget._member_map_.update(KeyboardKeyEnum._member_map_)
-
+KeyboardKeyTarget = enum.Enum(
+    "KeyboardKeyEnum", {key.upper(): key for key in KEYBOARD_KEYS}, type=Keynum
+)
 
 class ButtonTarget(enum.Enum):
     X_A = XUSB_BUTTON.XUSB_GAMEPAD_A

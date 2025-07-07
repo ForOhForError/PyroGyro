@@ -73,7 +73,7 @@ EVENT_TYPES_PASS_TO_PAD = set(
 )
 
 
-@sdl3.SDL_EventFilter
+@sdl3.SDL_EventFilter  # type: ignore
 def event_filter(userdata, event):
     return not (event.contents.type in EVENT_TYPES_FILTER)
 
@@ -123,10 +123,18 @@ class PyroGyroMapper:
                         self.logger.debug(f"== VALIDATION ERRORS ==")
                         err_count = 1
                         for error in validation_error.errors():
+                            clean_location = ".".join(
+                                [
+                                    str(loc)
+                                    for loc in error.get("loc")
+                                    if not "enum[" in str(loc)
+                                ]
+                            )
                             self.logger.debug(
-                                f"{err_count}: {error.get('type')} AT {error.get('loc')}: {error.get('msg')}"
+                                f"{err_count}: {error.get('msg')} FOR `{clean_location}` -> `{error.get('input')}`"
                             )
                             err_count += 1
+                        self.logger.debug(f"=====")
                     except ScannerError as scanner_error:
                         self.logger.info(
                             f"Error parsing config {config_path}; skipping"
@@ -224,14 +232,14 @@ class PyroGyroMapper:
 
     @classmethod
     def init_sdl(cls):
-        sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1".encode())
+        sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1".encode())  # type: ignore
         sdl_init_flags = (
             sdl3.SDL_INIT_VIDEO
             | sdl3.SDL_INIT_GAMEPAD
             | sdl3.SDL_INIT_HAPTIC
             | sdl3.SDL_INIT_SENSOR
         )
-        sdl3.SDL_Init(sdl_init_flags)
+        sdl3.SDL_Init(sdl_init_flags)  # type: ignore
 
     def populate_joystick_list(self, ignore_virtual=True):
         self.logger.info("== Gamepads currently connected: ==")
@@ -241,22 +249,22 @@ class PyroGyroMapper:
                 for pypad in self.pyropads.values()
             )
         ).union(set(VID_PID_IGNORE_LIST))
-        joystick_ids = sdl3.SDL_GetGamepads(None)
+        joystick_ids = sdl3.SDL_GetGamepads(None)  # type: ignore
 
         joysticks = {}
 
         joy_ix = 0
-        while joystick_ids[joy_ix] != 0:
-            joystick_id = joystick_ids[joy_ix]
+        while joystick_ids[joy_ix] != 0:  # type: ignore
+            joystick_id = joystick_ids[joy_ix]  # type: ignore
 
             pid = sdl3.SDL_GetJoystickProductForID(joystick_id)
             vid = sdl3.SDL_GetJoystickVendorForID(joystick_id)
             is_virtual = (vid, pid) in ignore_list
             joy_name_bytes = sdl3.SDL_GetJoystickNameForID(joystick_id)
             joystick_name = (
-                joy_name_bytes.decode() if joy_name_bytes else "[Name Unknown]"
+                joy_name_bytes.decode() if joy_name_bytes else "[Name Unknown]"  # type: ignore
             )
-            joystick_uuid_bytes = sdl3.SDL_GetGamepadGUIDForID(joystick_id).data[0:16]
+            joystick_uuid_bytes = sdl3.SDL_GetGamepadGUIDForID(joystick_id).data[0:16]  # type: ignore
             joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
 
             if not (is_virtual and ignore_virtual):
@@ -267,7 +275,7 @@ class PyroGyroMapper:
             )
             joy_ix += 1
         self.logger.info("==")
-        sdl3.SDL_free(joystick_ids)
+        sdl3.SDL_free(joystick_ids)  # type: ignore
         self.sdl_joysticks = joysticks
 
     def create_device_map(self):
@@ -297,13 +305,15 @@ class PyroGyroMapper:
             event = sdl3.SDL_Event()
             for pypad in self.pyropads.values():
                 pypad.on_poll_start()
-            while sdl3.SDL_PollEvent(event):
-                match event.type:
+            while sdl3.SDL_PollEvent(event):  # type: ignore
+                match event.type:  # type: ignore
                     case evt_type if evt_type in EVENT_TYPES_PASS_TO_PAD:
-                        gamepad_event = event.gdevice
+                        gamepad_event = event.gdevice  # type: ignore
                         joystick_uuid_bytes = sdl3.SDL_GetGamepadGUIDForID(
                             gamepad_event.which
-                        ).data[0:16]
+                        ).data[  # type: ignore
+                            0:16
+                        ]
                         joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
                         pypad = self.pyropads.get(joystick_uuid)
                         if pypad:
@@ -314,13 +324,13 @@ class PyroGyroMapper:
                         pass
                     case _:
                         self.logger.debug(
-                            f"fallthrough, ignoring gamepad event of type {hex(event.type)}"
+                            f"fallthrough, ignoring gamepad event of type {hex(event.type)}"  # type: ignore
                         )
             if populate_pads:
                 self.populate_joystick_list()
                 self.create_device_map()
                 if self.window_listener:
-                    exe_name, window_title = self.window_listener.get_current_focus()
+                    exe_name, window_title = self.window_listener.get_current_focus()  # type: ignore
                 else:
                     exe_name, window_title = "pyrogyro.exe", "PyroGyro Console"
                 self.autoload_refresh_and_evaluate(exe_name, window_title)
@@ -329,7 +339,7 @@ class PyroGyroMapper:
             for pypad in self.pyropads.values():
                 pypad.update(time.time())
             poll_ns = time.time_ns() - start_time
-            sdl3.SDL_DelayNS(ns_per_poll - poll_ns)
+            sdl3.SDL_DelayNS(ns_per_poll - poll_ns)  # type: ignore
 
     def run(self):
         self.logger.info("PyroGyro Starting")
@@ -341,7 +351,7 @@ class PyroGyroMapper:
         self.init_window_listener()
         self.start_console_input_thread()
         self.web_server.run_in_thread()
-        sdl3.SDL_SetEventFilter(event_filter, None)
+        sdl3.SDL_SetEventFilter(event_filter, None)  # type: ignore
 
         if self.window_listener:
             self.window_listener.process_current_window()

@@ -183,7 +183,7 @@ class Mapping(Layer):
     @classmethod
     def load_from_file(cls, file_handle=sys.stdin):
         parsed_from_file = yaml.load(file_handle)
-        constructed_mapping = cls.parse_obj(parsed_from_file)
+        constructed_mapping = cls.model_validate(parsed_from_file)
         constructed_mapping._loaded_yml_map = parsed_from_file
         graph = ControlGraph.from_mapping(constructed_mapping)
         constructed_mapping._control_graph = graph

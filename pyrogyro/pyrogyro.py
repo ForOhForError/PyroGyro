@@ -204,7 +204,7 @@ class PyroGyroMapper:
                         self.end_calibration()
                 case com if "keylist".startswith(com.lower()):
                     self.logger.info(" == MAPPABLE KEYS == ")
-                    for key in pyrogyro.io_types.KeyboardKeyTarget: # type: ignore
+                    for key in pyrogyro.io_types.KeyboardKeyTarget:  # type: ignore
                         self.logger.info(f" * {key.name}")
 
     def console_input_loop(self):

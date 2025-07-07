@@ -16,6 +16,7 @@ EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
 )
 
+
 def enum_or_by_name(T):
     def constructed_by_object_or_name(v: str | T) -> T:
         if isinstance(v, T):
@@ -29,16 +30,19 @@ def enum_or_by_name(T):
         T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
     ]
 
+
 class Keynum:
     def up(self):
-        keyUp(self.value) # type: ignore
+        keyUp(self.value)  # type: ignore
 
     def down(self):
-        keyDown(self.value) # type: ignore
+        keyDown(self.value)  # type: ignore
+
 
 KeyboardKeyTarget = enum.Enum(
     "KeyboardKeyEnum", {key.upper(): key for key in KEYBOARD_KEYS}, type=Keynum
 )
+
 
 class ButtonTarget(enum.Enum):
     X_A = XUSB_BUTTON.XUSB_GAMEPAD_A
@@ -214,6 +218,7 @@ BasicMapping = collections.abc.Mapping[
 BasicMappingOrListOfMappings = typing.Union[
     BasicMapping, typing.Sequence[typing.Union["DetailedMapping", BasicMapping]]
 ]
+
 
 def resolve_outputs(
     resolve_dict,
@@ -469,14 +474,22 @@ def to_bool(in_val):
         return True if abs(in_val) >= 0.01 else False
     return bool(in_val)
 
+
 class EventType(enum.Enum):
     PRESS = enum.auto()
     HOLD = enum.auto()
     UPDATE = enum.auto()
     RELEASE = enum.auto()
 
+
 class InputEvent:
-    def __init__(self, source:MapSource, event_type:EventType, value: typing.Any, timestamp:int = 0):
+    def __init__(
+        self,
+        source: MapSource,
+        event_type: EventType,
+        value: typing.Any,
+        timestamp: int = 0,
+    ):
         self.source = source
         self.event_type = event_type
         self.value = value
@@ -484,11 +497,11 @@ class InputEvent:
         self.deferred_event = False
         self.defer_until: int = 0
 
-    def defer_event(self, defer_timestamp:int):
+    def defer_event(self, defer_timestamp: int):
         self.deferred_event = True
         self.defer_until = defer_timestamp
-    
-    def is_processable(self, now: int|None=None):
+
+    def is_processable(self, now: int | None = None):
         if not now:
             now = time.monotonic_ns()
         if self.deferred_event:

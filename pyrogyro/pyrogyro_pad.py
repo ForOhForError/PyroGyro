@@ -10,15 +10,12 @@ import sdl3
 import vgamepad as vg
 
 import pyrogyro
+import pyrogyro.pyrogyro
 from pyrogyro.constants import DEFAULT_POLL_RATE
-from pyrogyro.gamepad_motion import (
-    GyroCalibration,
-    sensor_fusion_gravity,
-)
+from pyrogyro.gamepad_motion import GyroCalibration, sensor_fusion_gravity
 from pyrogyro.io_types import *
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
-import pyrogyro.pyrogyro
 from pyrogyro.web import WebServer
 
 ROYGBIV = (
@@ -45,9 +42,7 @@ class ColorSpace(enum.Enum):
 class InputStore:
     _inputs: typing.List[InputEvent] = field(default_factory=list)
 
-    def put_input(
-        self, input_event:InputEvent
-    ):
+    def put_input(self, input_event: InputEvent):
         self._inputs.append(input_event)
 
     def get_inputs(self):
@@ -341,14 +336,24 @@ class PyroGyroPad:
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
-                pyro_event = InputEvent(enum_val, EventType.PRESS if button_event.down else EventType.RELEASE, button_event.down, timestamp=timestamp)
+                pyro_event = InputEvent(
+                    enum_val,
+                    EventType.PRESS if button_event.down else EventType.RELEASE,
+                    button_event.down,
+                    timestamp=timestamp,
+                )
                 self.input_store.put_input(pyro_event)
             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
                 timestamp = int(axis_event.timestamp)
                 axis_id = axis_event.axis
                 enum_val = SingleAxisSource(axis_id)
-                pyro_event = InputEvent(enum_val, EventType.UPDATE, axis_event.value / 32768.0, timestamp=timestamp)
+                pyro_event = InputEvent(
+                    enum_val,
+                    EventType.UPDATE,
+                    axis_event.value / 32768.0,
+                    timestamp=timestamp,
+                )
                 self.input_store.put_input(pyro_event)
 
                 double_enum = get_double_source_for_axis(enum_val)
@@ -368,7 +373,12 @@ class PyroGyroPad:
                             target_value = Vec2(this_value, other_value)
                         else:
                             target_value = Vec2(other_value, this_value)
-                        paired_event = InputEvent(double_enum, EventType.UPDATE, target_value, timestamp=timestamp)
+                        paired_event = InputEvent(
+                            double_enum,
+                            EventType.UPDATE,
+                            target_value,
+                            timestamp=timestamp,
+                        )
                         self.input_store.put_input(paired_event)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
@@ -470,7 +480,9 @@ class PyroGyroPad:
             pyro_event = InputEvent(GyroSource.GYRO, EventType.UPDATE, pixel_vel)
             self.input_store.put_input(pyro_event)
         if self.touchpad_update:
-            pyro_event = InputEvent(TouchSource.TOUCHPAD, EventType.UPDATE, self.touchpad_state)
+            pyro_event = InputEvent(
+                TouchSource.TOUCHPAD, EventType.UPDATE, self.touchpad_state
+            )
             self.input_store.put_input(pyro_event)
         self.send_changed_input_values(delta_time=delta_time)
         self.vpad.update()

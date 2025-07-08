@@ -29,14 +29,14 @@ StringFileInfo(
   [
   StringTable(
     u'040904B0',
-    [StringStruct(u'CompanyName', u'Your company name'),
-    StringStruct(u'FileDescription', u'Your Filename'),
-    StringStruct(u'FileVersion', u'Your version number'),
-    StringStruct(u'InternalName', u'Your app name'),
-    StringStruct(u'LegalCopyright', u'Copyright (c) your company name'),
-    StringStruct(u'OriginalFilename', u'YourApp.exe'),
-    StringStruct(u'ProductName', u'YourApp'),
-    StringStruct(u'ProductVersion', u'4.2.0')])
+    [StringStruct(u'CompanyName', u'ForOhForError'),
+    StringStruct(u'FileDescription', u'ForOhForError'),
+    StringStruct(u'FileVersion', u'Automated Build'),
+    StringStruct(u'InternalName', u'PyroGyro'),
+    StringStruct(u'LegalCopyright', u'Copyright (c) ForOhForError'),
+    StringStruct(u'OriginalFilename', u'pyrogyro.exe'),
+    StringStruct(u'ProductName', u'PyroGyro'),
+    StringStruct(u'ProductVersion', u'Automated Build')])
   ]),
 VarFileInfo([VarStruct(u'Translation', [1033, 1200])]) 
   ]

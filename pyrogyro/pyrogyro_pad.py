@@ -136,12 +136,16 @@ class PyroGyroPad:
         self.gyro_calibrating = False
         self.gyro_calibration = GyroCalibration()
         self.last_timestamp = None
-        if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_GYRO):
-            self.logger.info("Gyro Sensor Detected")
-            sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_GYRO, True)
-        if sdl3.SDL_GamepadHasSensor(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL):
-            self.logger.info("Accel Sensor Detected")
-            sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, sdl3.SDL_SENSOR_ACCEL, True)
+        gyro_sensors = (sdl3.SDL_SENSOR_GYRO,sdl3.SDL_SENSOR_GYRO_L,sdl3.SDL_SENSOR_GYRO_R)
+        accel_sensors = (sdl3.SDL_SENSOR_GYRO,sdl3.SDL_SENSOR_GYRO_L,sdl3.SDL_SENSOR_GYRO_R)
+        for gyro_sensor in gyro_sensors:
+            if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor):
+                self.logger.info("Gyro Sensor Detected")
+                sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, gyro_sensor, True)
+        for accel_sensor in accel_sensors:
+            if sdl3.SDL_GamepadHasSensor(self.sdl_pad, accel_sensor):
+                self.logger.info("Accel Sensor Detected")
+                sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True)
 
         self.input_store = InputStore()
         self.mkb_state = {}
@@ -393,8 +397,10 @@ class PyroGyroPad:
                         self.last_gyro_time = timestamp
                     self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
                     self.last_gyro_time = timestamp
-                if sensor_type == sdl3.SDL_SENSOR_ACCEL:
+                elif sensor_type == sdl3.SDL_SENSOR_ACCEL:
                     accel.set_value(*sensor_event.data)
+                else:
+                    print("wuhoh")
                 if self.gyro_calibrating:
                     self.gyro_calibration.update(gyro_raw)
                     self.gyro_update = False

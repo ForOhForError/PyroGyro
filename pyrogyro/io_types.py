@@ -37,10 +37,7 @@ class Processable:
         logging.debug(f"processing {self} - {event}")
 
 
-class Keynum(Processable):
-    def __init__(self):
-        self.value = "a"
-
+class Keynum(Processable, enum.Enum):
     def up(self):
         keyUp(self.value)
 

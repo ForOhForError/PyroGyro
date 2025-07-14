@@ -234,16 +234,13 @@ class PyroGyroMapper:
     def init_sdl(cls):
         sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1".encode())  # type: ignore
         sdl3.SDL_SetHint(sdl3.SDL_HINT_GAMECONTROLLER_SENSOR_FUSION, "1".encode())  # type: ignore
-        
+
         # The format of the string is a comma separated list of USB VID/PID pairs in hexadecimal form
         gamepad_ignore_hint = ",".join(
-            [
-                f"{vidpid[0]:#06x}/{vidpid[1]:#06x}"
-                for vidpid in VID_PID_IGNORE_LIST
-            ]
+            [f"{vidpid[0]:#06x}/{vidpid[1]:#06x}" for vidpid in VID_PID_IGNORE_LIST]
         )
-        sdl3.SDL_SetHint(sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, gamepad_ignore_hint.encode()) # type: ignore
-        
+        sdl3.SDL_SetHint(sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, gamepad_ignore_hint.encode())  # type: ignore
+
         sdl_init_flags = (
             sdl3.SDL_INIT_VIDEO
             | sdl3.SDL_INIT_GAMEPAD

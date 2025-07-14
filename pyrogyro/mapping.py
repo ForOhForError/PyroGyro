@@ -187,7 +187,6 @@ class Mapping(Layer):
         constructed_mapping._loaded_yml_map = parsed_from_file
         graph = ControlGraph.from_mapping(constructed_mapping)
         constructed_mapping._control_graph = graph
-        graph.print_structure()
         return constructed_mapping
 
 
@@ -261,12 +260,14 @@ class ControlNode:
             for child in self.children:
                 child.pre_process(event_list)
 
-    def process(self, event_list: typing.List[InputEvent]):
+    def process(self, event_list: typing.List[InputEvent], pad):
         if self.active:
             for event in event_list:
                 if event.source == self.on and event.is_processable:
                     if self.do:
-                        self.do.process(event, graph=self.root_graph)
+                        self.do.process(event, graph=self.root_graph, pad=pad)
+            for child in self.children:
+                child.process(event_list, pad)
 
 
 class ControlGraph:
@@ -286,13 +287,13 @@ class ControlGraph:
     def set_layer(self, name: str, root: ControlNode):
         self.layers[name] = root
 
-    def process(self, event_list: typing.List[InputEvent]):
+    def process(self, event_list: typing.List[InputEvent], pad):
         self.main_layer.pre_process(event_list)
         for layer in self.layers.values():
             layer.pre_process(event_list)
-        self.main_layer.process(event_list)
+        self.main_layer.process(event_list, pad)
         for layer in self.layers.values():
-            layer.process(event_list)
+            layer.process(event_list, pad)
 
     @classmethod
     def from_mapping(cls, mapping: Mapping) -> "ControlGraph":

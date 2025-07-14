@@ -136,8 +136,16 @@ class PyroGyroPad:
         self.gyro_calibrating = False
         self.gyro_calibration = GyroCalibration()
         self.last_timestamp = None
-        gyro_sensors = (sdl3.SDL_SENSOR_GYRO,sdl3.SDL_SENSOR_GYRO_L,sdl3.SDL_SENSOR_GYRO_R)
-        accel_sensors = (sdl3.SDL_SENSOR_GYRO,sdl3.SDL_SENSOR_GYRO_L,sdl3.SDL_SENSOR_GYRO_R)
+        gyro_sensors = (
+            sdl3.SDL_SENSOR_GYRO,
+            sdl3.SDL_SENSOR_GYRO_L,
+            sdl3.SDL_SENSOR_GYRO_R,
+        )
+        accel_sensors = (
+            sdl3.SDL_SENSOR_GYRO,
+            sdl3.SDL_SENSOR_GYRO_L,
+            sdl3.SDL_SENSOR_GYRO_R,
+        )
         for gyro_sensor in gyro_sensors:
             if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor):
                 self.logger.info("Gyro Sensor Detected")
@@ -426,6 +434,7 @@ class PyroGyroPad:
 
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
+        self.mapping._control_graph.process(changed_inputs, self)
         for event in changed_inputs:
             value = event.value
             target_raw = self.mapping.map.get(event.source)

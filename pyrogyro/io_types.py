@@ -1,5 +1,6 @@
 import collections.abc
 import enum
+import logging
 import time
 import types
 import typing
@@ -31,7 +32,12 @@ def enum_or_by_name(T):
     ]
 
 
-class Keynum:
+class Processable:
+    def process(self, event, graph=None, pad=None):
+        logging.debug(f"processing {self} - {event}")
+
+
+class Keynum(Processable):
     def up(self):
         keyUp(self.value)  # type: ignore
 
@@ -44,7 +50,7 @@ KeyboardKeyTarget = enum.Enum(
 )
 
 
-class ButtonTarget(enum.Enum):
+class ButtonTarget(Processable, enum.Enum):
     X_A = XUSB_BUTTON.XUSB_GAMEPAD_A
     X_B = XUSB_BUTTON.XUSB_GAMEPAD_B
     X_X = XUSB_BUTTON.XUSB_GAMEPAD_X
@@ -62,7 +68,7 @@ class ButtonTarget(enum.Enum):
     X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
 
-class MouseTarget(enum.Enum):
+class MouseTarget(Processable, enum.Enum):
     MOUSE = "MOUSE"
 
     def __init__(self, *args, **kwargs):
@@ -75,7 +81,7 @@ class MouseTarget(enum.Enum):
         )
 
 
-class MouseButtonTarget(enum.Enum):
+class MouseButtonTarget(Processable, enum.Enum):
     LMOUSE = PRIMARY
     RMOUSE = SECONDARY
     MMOUSE = MIDDLE
@@ -139,7 +145,7 @@ class DoubleAxisSource(enum.Enum):
         return None
 
 
-class SingleAxisTarget(enum.Enum):
+class SingleAxisTarget(Processable, enum.Enum):
     X_L2 = "X_L2"
     X_R2 = "X_R2"
     X_LSTICK_X = "X_LSTICK_X"
@@ -148,7 +154,7 @@ class SingleAxisTarget(enum.Enum):
     X_RSTICK_Y = "X_RSTICK_Y"
 
 
-class DoubleAxisTarget(enum.Enum):
+class DoubleAxisTarget(Processable, enum.Enum):
     X_LSTICK = (
         SingleAxisTarget.X_LSTICK_X,
         SingleAxisTarget.X_LSTICK_Y,
@@ -159,7 +165,7 @@ class DoubleAxisTarget(enum.Enum):
     )
 
 
-class LayerTarget(BaseModel):
+class LayerTarget(BaseModel, Processable):
     map_as: typing.Literal["LAYER"]
     layer: str
 
@@ -228,7 +234,7 @@ def resolve_outputs(
     real_world_calibration=1.0,
     in_game_sens=1.0,
     os_mouse_speed=1.0,
-    **kwargs
+    **kwargs,
 ):
     if type(target) in MapDirectTargetTypes:
         resolve_dict[target] = value
@@ -248,12 +254,12 @@ def resolve_outputs(
                 real_world_calibration=real_world_calibration,
                 in_game_sens=in_game_sens,
                 os_mouse_speed=os_mouse_speed,
-                **kwargs
+                **kwargs,
             )
     return resolve_dict
 
 
-class MapComplexTarget(BaseModel):
+class MapComplexTarget(Processable, BaseModel):
     output: MapDirectTarget
     on: str
 
@@ -264,7 +270,7 @@ class MapComplexTarget(BaseModel):
 ZERO_VEC2 = Vec2()
 
 
-class AndTarget(BaseModel):
+class AndTarget(Processable, BaseModel):
     AND: BasicMappingOrListOfMappings
 
     def map_to_outputs(self, input_value, **kwargs):
@@ -275,7 +281,7 @@ class AndTarget(BaseModel):
             return {}
 
 
-class AsAim(BaseModel):
+class AsAim(Processable, BaseModel):
     map_as: typing.Literal["AIM"]
     o: "MapTarget"
     sens: typing.Union[float, typing.Tuple[float, float]] = 360.0
@@ -339,7 +345,7 @@ class AsAim(BaseModel):
         real_world_calibration=1.0,
         in_game_sens=1.0,
         os_mouse_speed=1.0,
-        **kwargs
+        **kwargs,
     ):
         result = ZERO_VEC2
         if isinstance(input_value, Vec2):
@@ -368,11 +374,11 @@ class AsAim(BaseModel):
             real_world_calibration=real_world_calibration,
             in_game_sens=in_game_sens,
             os_mouse_speed=os_mouse_speed,
-            **kwargs
+            **kwargs,
         )
 
 
-class AsDpad(BaseModel):
+class AsDpad(Processable, BaseModel):
     map_as: typing.Literal["DPAD"]
     UP: typing.Optional["MapTarget"] = None
     RIGHT: typing.Optional["MapTarget"] = None
@@ -393,7 +399,7 @@ class AsDpad(BaseModel):
                         outputs,
                         self.UP,
                         (angle >= 310 and angle <= 360) or (angle >= 0 and angle <= 50),
-                        **kwargs
+                        **kwargs,
                     )
                 if self.LEFT:
                     resolve_outputs(
@@ -414,7 +420,7 @@ class AsDpad(BaseModel):
         return outputs
 
 
-class AsGridSticks(BaseModel):
+class AsGridSticks(Processable, BaseModel):
     map_as: typing.Literal["GRID_STICKS"]
     pad_fingers: typing.Optional[
         typing.Mapping[int, typing.Mapping[int, "MapTarget"]]
@@ -497,10 +503,14 @@ class InputEvent:
         self.deferred_event = False
         self.defer_until: int = 0
 
+    def __repr__(self):
+        return f"[InputEvent: {self.source} got {self.event_type} with {self.value}]"
+
     def defer_event(self, defer_timestamp: int):
         self.deferred_event = True
         self.defer_until = defer_timestamp
 
+    @property
     def is_processable(self, now: int | None = None):
         if not now:
             now = time.monotonic_ns()

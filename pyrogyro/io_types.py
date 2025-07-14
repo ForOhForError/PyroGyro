@@ -38,11 +38,20 @@ class Processable:
 
 
 class Keynum(Processable):
+    def __init__(self):
+        self.value = "a"
+
     def up(self):
-        keyUp(self.value)  # type: ignore
+        keyUp(self.value)
 
     def down(self):
-        keyDown(self.value)  # type: ignore
+        keyDown(self.value)
+
+    def process(self, event, graph=None, pad=None):
+        if to_bool(event.value):
+            self.down()
+        else:
+            self.up()
 
 
 KeyboardKeyTarget = enum.Enum(
@@ -67,6 +76,12 @@ class ButtonTarget(Processable, enum.Enum):
     X_BACK = XUSB_BUTTON.XUSB_GAMEPAD_BACK
     X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
+    def process(self, event, graph=None, pad=None):
+        if to_bool(event.value):
+            pad.vpad.press_button(self.value)
+        else:
+            pad.vpad.release_button(self.value)
+
 
 class MouseTarget(Processable, enum.Enum):
     MOUSE = "MOUSE"
@@ -80,6 +95,10 @@ class MouseTarget(Processable, enum.Enum):
             *move_mouse(x, y, self._leftover_vel.x, self._leftover_vel.y)
         )
 
+    def process(self, event, graph=None, pad=None):
+        if isinstance(event.value, Vec2):
+            self.move_mouse(event.value.x, event.value.y)
+
 
 class MouseButtonTarget(Processable, enum.Enum):
     LMOUSE = PRIMARY
@@ -91,6 +110,12 @@ class MouseButtonTarget(Processable, enum.Enum):
 
     def down(self):
         mouseDown(button=self.value)
+
+    def process(self, event, graph=None, pad=None):
+        if to_bool(event.value):
+            self.down()
+        else:
+            self.up()
 
 
 class SDLButtonSource(enum.Enum):
@@ -153,6 +178,14 @@ class SingleAxisTarget(Processable, enum.Enum):
     X_RSTICK_X = "X_RSTICK_X"
     X_RSTICK_Y = "X_RSTICK_Y"
 
+    def process(self, event, graph=None, pad=None):
+        float_val = to_float(event)
+        match self:
+            case SingleAxisTarget.X_L2:
+                pad.vpad.left_trigger_float(float_val)
+            case SingleAxisTarget.X_R2:
+                pad.vpad.right_trigger_float(float_val)
+
 
 class DoubleAxisTarget(Processable, enum.Enum):
     X_LSTICK = (
@@ -163,6 +196,14 @@ class DoubleAxisTarget(Processable, enum.Enum):
         SingleAxisTarget.X_RSTICK_X,
         SingleAxisTarget.X_RSTICK_Y,
     )
+
+    def process(self, event, graph=None, pad=None):
+        if isinstance(event.value, Vec2):
+            match self:
+                case DoubleAxisTarget.X_LSTICK:
+                    pad.vpad.left_joystick_float(event.value.x, -event.value.y)
+                case DoubleAxisTarget.X_RSTICK:
+                    pad.vpad.right_joystick_float(event.value.x, -event.value.y)
 
 
 class LayerTarget(BaseModel, Processable):

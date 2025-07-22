@@ -176,7 +176,7 @@ class SingleAxisTarget(Processable, enum.Enum):
     X_RSTICK_Y = "X_RSTICK_Y"
 
     def process(self, event, graph=None, pad=None):
-        float_val = to_float(event)
+        float_val = to_float(event.value)
         match self:
             case SingleAxisTarget.X_L2:
                 pad.vpad.left_trigger_float(float_val)

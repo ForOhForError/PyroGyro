@@ -176,7 +176,7 @@ class GyroConfig:
 
     def get_smoothed_gyro(self, sample: Vec2):
         self._smooth_buffer.append(sample)
-        if len(self._smooth_buffer) > self.smooth_window:
+        if len(self._smooth_buffer) > (self.smooth_window if self.smooth_window else 0):
             self._smooth_buffer.popleft()
         smoothed = Vec2()
         for entry in self._smooth_buffer:
@@ -213,14 +213,14 @@ class GyroConfig:
         return sample
 
     def get_slow_sens(self):
-        if isinstance(self.gyro_sens, float):
+        if isinstance(self.gyro_sens, (float, int)):
             return self.gyro_sens, self.gyro_sens
         else:
             return self.gyro_sens
 
     def get_fast_sens(self):
         if self.fast_sens:
-            if isinstance(self.fast_sens, float):
+            if isinstance(self.fast_sens, (float, int)):
                 return self.fast_sens, self.fast_sens
             else:
                 return self.fast_sens
@@ -261,6 +261,8 @@ class GyroConfig:
                 calibrated_gyro = gyro_camera_player_lean(
                     gyro, grav_norm, delta_seconds
                 )
+            case _:
+                calibrated_gyro = Vec2(0, 0)
         if self.smooth_window:
             if self.smooth_threshold:
                 calibrated_gyro = self.get_tiered_smoothed_gyro(

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from ruamel.yaml import YAML, CommentedMap, CommentedSeq
 
 from pyrogyro.control_graph import ControlGraph, ControlNode, GraphComponent, to_node
-from pyrogyro.gamepad_motion import GyroConfig, GyroMode
+from pyrogyro.gamepad_motion import GyroConfig
 from pyrogyro.io_types import (
     BasicMappingOrListOfMappings,
     ButtonTarget,
@@ -24,10 +24,12 @@ from pyrogyro.io_types import (
     enum_or_by_name,
 )
 from pyrogyro.platform_util import get_os_mouse_speed
+from pyrogyro.complex_targets import register_complex_targets
 
 yaml = YAML()
 yaml.compact(seq_seq=False, seq_map=False)
 
+register_complex_targets()
 
 class GyroMapping(BaseModel):
     mode: GyroConfig = Field(default_factory=GyroConfig)
@@ -59,7 +61,7 @@ class AutoloadConfig(BaseModel):
 
 
 class Layer(BaseModel, GraphComponent):
-    mapping: BasicMappingOrListOfMappings = Field(default_factory=CommentedMap)
+    mapping: 'BasicMappingOrListOfMappings' = Field(default_factory=CommentedMap)
     gyro: GyroMapping = Field(default_factory=GyroMapping)
 
     def __init__(self, *args, **kwargs):
@@ -89,7 +91,7 @@ class Layer(BaseModel, GraphComponent):
     def to_node(
         self, root_graph: ControlGraph, on: MapSource | None = None
     ) -> ControlNode:
-        return to_node(self.mapping,root_graph,on)
+        return to_node(self.mapping, root_graph, on)
 
 
 _MAPPING_FIELD_ORDER = (
@@ -101,7 +103,6 @@ _MAPPING_FIELD_ORDER = (
     "gyro",
     "layers",
 )
-
 
 class Mapping(Layer):
     name: str = "Default Mapping"
@@ -191,12 +192,16 @@ class Mapping(Layer):
         parsed_from_file = yaml.load(file_handle)
         constructed_mapping = cls.model_validate(parsed_from_file)
         constructed_mapping._loaded_yml_map = parsed_from_file
-        graph = ControlGraph()
+        graph = constructed_mapping._control_graph
         node = constructed_mapping.to_node(graph)
         node.always_active = True
+        graph.set_main_layer(node)
+        for layer_name, layer in constructed_mapping.layers.items():
+            node = layer.to_node(graph)
+            graph.set_layer(layer_name, node)
+        graph.print_structure()
         constructed_mapping._control_graph = graph
         return constructed_mapping
-
 
 def get_default_xbox_mapping():
     return Mapping(

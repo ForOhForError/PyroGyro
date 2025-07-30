@@ -1,21 +1,14 @@
 import logging
 import typing
 
-from pyrogyro.io_types import (
-    DetailedMapping,
-    EventType,
-    InputEvent,
-    MapSource,
-    MapTarget,
-)
-
+import pyrogyro.io_types 
 
 class ControlNode:
     def __init__(
         self,
         root_graph: "ControlGraph",
-        on: MapSource = None,
-        do: MapTarget = None,
+        on: pyrogyro.io_types.MapSource = None,
+        do: pyrogyro.io_types.MapTarget = None,
         always_active=False,
     ):
         self.root_graph = root_graph
@@ -23,7 +16,7 @@ class ControlNode:
         self.on = on
         self.do = do
         self.always_active = always_active
-        self.active = always_active
+        self.active = False
 
     def print_structure(self, space_level=0, log_level=logging.DEBUG):
         if self.always_active:
@@ -40,7 +33,7 @@ class ControlNode:
         root_map = layer.mapping
         if isinstance(root_map, typing.Sequence):
             for entry in root_map:
-                if isinstance(entry, DetailedMapping):
+                if isinstance(entry, pyrogyro.io_types.DetailedMapping):
                     node = ControlNode(self.root_graph, entry.input, entry.output)
                     self.children.append(node)
                 else:
@@ -66,22 +59,22 @@ class ControlNode:
                     node = ControlNode(self.root_graph, entry_key, entry_value)
                     self.children.append(node)
 
-    def pre_process(self, event_list: typing.List[InputEvent]):
+    def pre_process(self, event_list: typing.List[pyrogyro.io_types.InputEvent]):
         if not self.always_active:
             for event in event_list:
                 if event.source == self.on:
-                    if event.event_type == EventType.PRESS:
+                    if event.event_type == pyrogyro.io_types.EventType.PRESS:
                         self.active = True
-                    elif event.event_type == EventType.RELEASE:
+                    elif event.event_type == pyrogyro.io_types.EventType.RELEASE:
                         self.active = False
-                    elif event.event_type == EventType.UPDATE:
+                    elif event.event_type == pyrogyro.io_types.EventType.UPDATE:
                         self.active = True
-        if self.active:
+        if self.active or self.always_active:
             for child in self.children:
                 child.pre_process(event_list)
 
-    def process(self, event_list: typing.List[InputEvent], pad):
-        if self.active:
+    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad):
+        if self.active or self.always_active:
             for event in event_list:
                 if event.source == self.on and event.is_processable:
                     if self.do:
@@ -91,7 +84,7 @@ class ControlNode:
 
 
 class ControlGraph:
-    def __init__(self, main_layer: ControlNode|None = None):
+    def __init__(self, main_layer: ControlNode | None = None):
         if not main_layer:
             self.main_layer = ControlNode(self, always_active=True)
         else:
@@ -110,7 +103,10 @@ class ControlGraph:
     def set_layer(self, name: str, root: ControlNode):
         self.layers[name] = root
 
-    def process(self, event_list: typing.List[InputEvent], pad):
+    def set_main_layer(self, main_layer: ControlNode):
+        self.main_layer = main_layer
+
+    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad):
         self.main_layer.pre_process(event_list)
         for layer in self.layers.values():
             layer.pre_process(event_list)
@@ -118,30 +114,25 @@ class ControlGraph:
         for layer in self.layers.values():
             layer.process(event_list, pad)
 
-    @classmethod
-    def from_mapping(cls, mapping: "Mapping") -> "ControlGraph":
-        graph = cls()
-        graph.main_layer.add_from_layer(mapping)
-        for layer_name, layer in mapping.layers.items():
-            node = ControlNode(graph, always_active=True)
-            node.add_from_layer(layer)
-            graph.layers[layer_name] = node
-        return graph
 
-
-def to_node(entry, root_graph: ControlGraph, on: MapSource | None = None):
+def to_node(entry, root_graph: ControlGraph, on: pyrogyro.io_types.MapSource | None = FileNotFoundError):
     root = ControlNode(root_graph, on=on)
     if isinstance(entry, typing.Sequence):
-        pass
+        for sub_entry in entry:
+            node = to_node(sub_entry, root_graph, on=on)
+            root.add_child(node)
     elif isinstance(entry, dict):
-        pass
+        for sub_entry_key, sub_entry in entry.items():
+            root.add_child(to_node(sub_entry, root_graph, on=sub_entry_key))
     elif isinstance(entry, GraphComponent):
-        return entry.to_node(root_graph, on=on)
+        root.add_child(entry.to_node(root_graph, on=on))
+    else:
+        root.do = entry
     return root
 
 
 class GraphComponent:
     def to_node(
-        self, root_graph: ControlGraph, on: MapSource | None = None
+        self, root_graph: ControlGraph, on: pyrogyro.io_types.MapSource | None = None
     ) -> ControlNode:
         raise NotImplementedError()

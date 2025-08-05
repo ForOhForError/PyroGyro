@@ -17,7 +17,8 @@ EnumNameSerializer = PlainSerializer(
     lambda e: e.name, return_type="str", when_used="always"
 )
 
-COMPLEX_TARGET_CLASSES: typing.Dict[str, type] = {}
+COMPLEX_TARGET_CLASSES: typing.List[type] = []
+
 
 def enum_or_by_name(T):
     def constructed_by_object_or_name(v: str | T) -> T:
@@ -32,23 +33,29 @@ def enum_or_by_name(T):
         T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
     ]
 
+
 class Processable:
     def process(self, event, graph=None, pad=None):
         logging.debug(f"processing {self} - {event}")
 
+
 def ensure_complex_target(value: typing.Any) -> typing.Any:
-    target = ComplexTargetBase.model_validate(value)
-    map_as = target.map_as
-    if map_as:
-        cls = COMPLEX_TARGET_CLASSES.get(map_as)
-        if cls:
+    for cls in COMPLEX_TARGET_CLASSES:
+        try:
             return cls.model_validate(value)
-    raise ValueError("Complex target could not be resolved")
+        except ValueError:
+            pass
+    raise ValueError("Could not parse complex target")
+
 
 class ComplexTargetBase(Processable, BaseModel):
-    map_as: str
+    pass
 
-ComplexTarget = typing.Annotated[ComplexTargetBase, BeforeValidator(ensure_complex_target)]
+
+ComplexTarget = typing.Annotated[
+    ComplexTargetBase, BeforeValidator(ensure_complex_target)
+]
+
 
 class Keynum(Processable, enum.Enum):
     def up(self):
@@ -86,7 +93,9 @@ class ButtonTarget(Processable, enum.Enum):
     X_BACK = XUSB_BUTTON.XUSB_GAMEPAD_BACK
     X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
-    def process(self, event, graph=None, pad:typing.ForwardRef("PyroGyroPad")|None = None):
+    def process(
+        self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
+    ):
         if pad:
             if to_bool(event.value):
                 pad.vpad.press_button(self.value)
@@ -106,7 +115,9 @@ class MouseTarget(Processable, enum.Enum):
             *move_mouse(x, y, self._leftover_vel.x, self._leftover_vel.y)
         )
 
-    def process(self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad")|None = None):
+    def process(
+        self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
+    ):
         if pad:
             if isinstance(event.value, Vec2):
                 self.move_mouse(event.value.x, event.value.y)
@@ -125,7 +136,9 @@ class MouseButtonTarget(Processable, enum.Enum):
         pass
         # mouseDown(button=self.value)
 
-    def process(self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad")|None = None):
+    def process(
+        self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
+    ):
         if to_bool(event.value):
             self.down()
         else:
@@ -192,7 +205,9 @@ class SingleAxisTarget(Processable, enum.Enum):
     X_RSTICK_X = "X_RSTICK_X"
     X_RSTICK_Y = "X_RSTICK_Y"
 
-    def process(self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad")|None = None):
+    def process(
+        self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
+    ):
         float_val = to_float(event.value)
         if pad:
             match self:
@@ -212,7 +227,9 @@ class DoubleAxisTarget(Processable, enum.Enum):
         SingleAxisTarget.X_RSTICK_Y,
     )
 
-    def process(self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad")|None = None):
+    def process(
+        self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
+    ):
         if pad:
             if isinstance(event.value, Vec2):
                 match self:
@@ -221,16 +238,20 @@ class DoubleAxisTarget(Processable, enum.Enum):
                     case DoubleAxisTarget.X_RSTICK:
                         pad.vpad.right_joystick_float(event.value.x, -event.value.y)
 
+
 class LayerTarget(BaseModel, Processable):
     map_as: typing.Literal["LAYER"]
     layer: str
 
     def __hash__(self):
         return hash(self.layer)
-    
-    def process(self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad")|None = None):
+
+    def process(
+        self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
+    ):
         if graph:
             pass
+
 
 class GyroSource(enum.Enum):
     GYRO = "GYRO"
@@ -278,13 +299,16 @@ MapDirectTargetTypes = (
 )
 
 MapTarget = typing.Union[
-    MapDirectTarget, ComplexTarget, 
+    MapDirectTarget,
+    ComplexTarget,
 ]
 MapSource = typing.Union[MapDirectSource]
+
 
 class DetailedMapping(BaseModel):
     input: MapSource
     output: MapTarget
+
 
 BasicMapping = collections.abc.Mapping[
     MapSource, typing.Union[MapTarget, typing.Sequence[MapTarget]]
@@ -293,10 +317,9 @@ BasicMappingOrListOfMappings = typing.Union[
     BasicMapping, typing.Sequence[typing.Union[DetailedMapping, BasicMapping]]
 ]
 
-def register_map_target(target):
-    map_as_value = target.schema().get("properties").get("map_as").get("const")
-    COMPLEX_TARGET_CLASSES[map_as_value] = target
 
+def register_map_target(target):
+    COMPLEX_TARGET_CLASSES.append(target)
 
 
 def to_float(in_val):

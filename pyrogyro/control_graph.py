@@ -1,7 +1,8 @@
 import logging
 import typing
 
-import pyrogyro.io_types 
+import pyrogyro.io_types
+
 
 class ControlNode:
     def __init__(
@@ -115,7 +116,9 @@ class ControlGraph:
             layer.process(event_list, pad)
 
 
-def to_node(entry, root_graph: ControlGraph, on: pyrogyro.io_types.MapSource | None = FileNotFoundError):
+def to_node(
+    entry, root_graph: ControlGraph, on: pyrogyro.io_types.MapSource | None = None
+):
     root = ControlNode(root_graph, on=on)
     if isinstance(entry, typing.Sequence):
         for sub_entry in entry:

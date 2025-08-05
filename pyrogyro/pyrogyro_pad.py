@@ -435,32 +435,8 @@ class PyroGyroPad:
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
         self.mapping._control_graph.process(changed_inputs, self)
-        # for event in changed_inputs:
-        #     value = event.value
-        #     target_raw = self.mapping.map.get(event.source)
-        #     for target in (
-        #         target_raw if isinstance(target_raw, typing.Sequence) else (target_raw,)
-        #     ):
-        #         if target:
-        #             if type(target) in MapDirectTargetTypes:
-        #                 self.send_value(value, target, source=event.source)
-        #             else:
-        #                 complex_output_dict = resolve_outputs(
-        #                     dict(),
-        #                     target,
-        #                     value,
-        #                     delta_time=delta_time,
-        #                     real_world_calibration=self.mapping.get_real_world_calibration(),
-        #                     in_game_sens=self.mapping.get_in_game_sens(),
-        #                     os_mouse_speed=self.mapping.get_os_mouse_speed_correction(),
-        #                 )
-        #                 for mapped_output_key in complex_output_dict:
-        #                     self.send_value(
-        #                         complex_output_dict[mapped_output_key],
-        #                         mapped_output_key,
-        #                         source=event.source,
-        #                     )
-        #     self.send_to_web_server(event.source, value)
+        for event in changed_inputs:
+            self.send_to_web_server(event.source, event.value)
         self.input_store.clear()
 
     def update(self, time_now: float):

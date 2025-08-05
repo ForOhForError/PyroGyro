@@ -1,31 +1,44 @@
-from pyrogyro.io_types import ComplexTargetBase, BasicMappingOrListOfMappings, to_bool, MapDirectTarget, MapTarget, register_map_target
-from pyrogyro.math import Vec2
 import typing
 
+from pyrogyro.control_graph import ControlGraph, ControlNode, GraphComponent
+from pyrogyro.io_types import (
+    BasicMappingOrListOfMappings,
+    ComplexTargetBase,
+    MapDirectTarget,
+    MapSource,
+    MapTarget,
+    register_map_target,
+    to_bool,
+)
+from pyrogyro.math import Vec2
+
 ZERO_VEC2 = Vec2()
+
 
 def resolve_outputs(*args, **kwargs):
     return {}
 
-# class MapComplexTarget(ComplexTargetBase):
-#     output: MapDirectTarget
-#     on: str
 
-#     def __hash__(self):
-#         return hash((self.output, self.on))
+class MapComplexTarget(ComplexTargetBase):
+    output: MapDirectTarget
+    on: str
 
-# class AndTarget(ComplexTargetBase):
-#     AND: BasicMappingOrListOfMappings
-
-#     def map_to_outputs(self, input_value, **kwargs):
-#         print(dir(self))
-#         if to_bool(input_value):
-#             return resolve_outputs({}, self.AND, input_value, **kwargs)
-#         else:
-#             return {}
+    def __hash__(self):
+        return hash((self.output, self.on))
 
 
-class AsAim(ComplexTargetBase):
+class AndTarget(ComplexTargetBase):
+    AND: BasicMappingOrListOfMappings
+
+    def map_to_outputs(self, input_value, **kwargs):
+        print(dir(self))
+        if to_bool(input_value):
+            return resolve_outputs({}, self.AND, input_value, **kwargs)
+        else:
+            return {}
+
+
+class AsAim(ComplexTargetBase, GraphComponent):
     map_as: typing.Literal["AIM"]
     o: MapTarget
     sens: typing.Union[float, typing.Tuple[float, float]] = 360.0
@@ -121,6 +134,11 @@ class AsAim(ComplexTargetBase):
             **kwargs,
         )
 
+    def to_node(
+        self, root_graph: ControlGraph, on: MapSource | None = None
+    ) -> ControlNode:
+        return ControlNode(root_graph, on=on, do=self)
+
 
 class AsDpad(ComplexTargetBase):
     map_as: typing.Literal["DPAD"]
@@ -201,6 +219,7 @@ class AsGridSticks(ComplexTargetBase):
                             resolve_outputs(outputs, target, result, **kwargs)
         return outputs
 
+
 def register_complex_targets():
-    for typ in [AsGridSticks, AsAim, AsDpad]:
+    for typ in [AsGridSticks, AsAim, AsDpad, AndTarget, MapComplexTarget]:
         register_map_target(typ)

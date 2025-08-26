@@ -19,6 +19,9 @@ class ControlNode:
         self.always_active = always_active
         self.active = False
 
+    def get_children(self):
+        return self.children
+
     def print_structure(self, space_level=0, log_level=logging.DEBUG):
         if self.always_active:
             logging.log(log_level, f"{' '*space_level}(Always Active)")
@@ -71,17 +74,19 @@ class ControlNode:
                     elif event.event_type == pyrogyro.io_types.EventType.UPDATE:
                         self.active = True
         if self.active or self.always_active:
-            for child in self.children:
+            for child in self.get_children():
                 child.pre_process(event_list)
 
-    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad):
+    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad, delta_time: float = 0.0):
         if self.active or self.always_active:
             for event in event_list:
                 if event.source == self.on and event.is_processable:
                     if self.do:
-                        self.do.process(event, graph=self.root_graph, pad=pad)
-            for child in self.children:
-                child.process(event_list, pad)
+                        self.do.handle_input(event, graph=self.root_graph, pad=pad)
+            if self.do:
+                self.do.handle_tick(delta_time=delta_time, graph=self.root_graph, pad=pad)
+            for child in self.get_children():
+                child.process(event_list, pad, delta_time=delta_time)
 
 
 class ControlGraph:
@@ -107,13 +112,13 @@ class ControlGraph:
     def set_main_layer(self, main_layer: ControlNode):
         self.main_layer = main_layer
 
-    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad):
+    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad, delta_time: float = 0.0):
         self.main_layer.pre_process(event_list)
         for layer in self.layers.values():
             layer.pre_process(event_list)
-        self.main_layer.process(event_list, pad)
+        self.main_layer.process(event_list, pad, delta_time=delta_time)
         for layer in self.layers.values():
-            layer.process(event_list, pad)
+            layer.process(event_list, pad, delta_time=delta_time)
 
 
 def to_node(

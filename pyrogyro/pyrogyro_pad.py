@@ -434,7 +434,7 @@ class PyroGyroPad:
 
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()
-        self.mapping._control_graph.process(changed_inputs, self)
+        self.mapping._control_graph.process(changed_inputs, self, delta_time=delta_time)
         for event in changed_inputs:
             self.send_to_web_server(event.source, event.value)
         self.input_store.clear()

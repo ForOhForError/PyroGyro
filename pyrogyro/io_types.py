@@ -35,8 +35,11 @@ def enum_or_by_name(T):
 
 
 class Processable:
-    def process(self, event, graph=None, pad=None):
+    def handle_input(self, event, graph=None, pad=None):
         logging.debug(f"processing {self} - {event}")
+        
+    def handle_tick(self, delta_time: float=0.0, graph=None, pad=None):
+        pass
 
 
 def ensure_complex_target(value: typing.Any) -> typing.Any:
@@ -64,7 +67,7 @@ class Keynum(Processable, enum.Enum):
     def down(self):
         keyDown(self.value)
 
-    def process(self, event, graph=None, pad=None):
+    def handle_input(self, event, graph=None, pad=None):
         if to_bool(event.value):
             self.down()
         else:
@@ -93,7 +96,7 @@ class ButtonTarget(Processable, enum.Enum):
     X_BACK = XUSB_BUTTON.XUSB_GAMEPAD_BACK
     X_GUIDE = XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
 
-    def process(
+    def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
     ):
         if pad:
@@ -115,7 +118,7 @@ class MouseTarget(Processable, enum.Enum):
             *move_mouse(x, y, self._leftover_vel.x, self._leftover_vel.y)
         )
 
-    def process(
+    def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
     ):
         if pad:
@@ -136,7 +139,7 @@ class MouseButtonTarget(Processable, enum.Enum):
         pass
         # mouseDown(button=self.value)
 
-    def process(
+    def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
     ):
         if to_bool(event.value):
@@ -205,7 +208,7 @@ class SingleAxisTarget(Processable, enum.Enum):
     X_RSTICK_X = "X_RSTICK_X"
     X_RSTICK_Y = "X_RSTICK_Y"
 
-    def process(
+    def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
     ):
         float_val = to_float(event.value)
@@ -227,7 +230,7 @@ class DoubleAxisTarget(Processable, enum.Enum):
         SingleAxisTarget.X_RSTICK_Y,
     )
 
-    def process(
+    def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
     ):
         if pad:
@@ -246,7 +249,7 @@ class LayerTarget(BaseModel, Processable):
     def __hash__(self):
         return hash(self.layer)
 
-    def process(
+    def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None
     ):
         if graph:

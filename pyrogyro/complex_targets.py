@@ -9,6 +9,8 @@ from pyrogyro.io_types import (
     MapTarget,
     register_map_target,
     to_bool,
+    InputEvent,
+    EventType
 )
 from pyrogyro.math import Vec2
 
@@ -54,6 +56,7 @@ class AsAim(ComplexTargetBase, GraphComponent):
         super().__init__(*args, **kwargs)
         self._accel_mult = 1.0
         self._output_vec = Vec2()
+        self._input_vec = Vec2()
         self._max_output_thresh = 1.0 - self.deadzone_outer
 
     def _interp_input(self, input_vec: Vec2):
@@ -94,25 +97,24 @@ class AsAim(ComplexTargetBase, GraphComponent):
             vel_vec.y * input_value.y * (-1 if self.invert_y else 1),
         )
         return vel_vec
-
-    def map_to_outputs(
-        self,
-        input_value,
-        delta_time=0.0,
-        real_world_calibration=1.0,
-        in_game_sens=1.0,
-        os_mouse_speed=1.0,
-        **kwargs,
-    ):
-        result = ZERO_VEC2
+    
+    def handle_input(self, event, graph=None, pad=None):
+        input_value = event.value
         if isinstance(input_value, Vec2):
-            magnitude = input_value.length()
+            self._input_vec.set_value(input_value.x, input_value.y)
+        
+    def handle_tick(self, delta_time: float=0.0, graph=None, pad=None):
+        if pad:
+            real_world_calibration = pad.mapping.get_real_world_calibration()
+            in_game_sens = pad.mapping.get_in_game_sens()
+            os_mouse_speed = pad.mapping.get_os_mouse_speed_correction()
+            magnitude = self._input_vec.length()
             full_tilt = magnitude >= self._max_output_thresh
             if not full_tilt:
                 self._accel_mult = 1.0
             if magnitude >= self.deadzone_inner:
                 result = self.get_velocity_vec(
-                    input_value,
+                    self._input_vec,
                     delta_time,
                     real_world_calibration=real_world_calibration,
                     in_game_sens=in_game_sens,
@@ -123,16 +125,9 @@ class AsAim(ComplexTargetBase, GraphComponent):
                         self._accel_mult + (delta_time * self.accel_rate),
                         self.accel_cap,
                     )
-        return resolve_outputs(
-            {},
-            self.o,
-            result,
-            delta_time=delta_time,
-            real_world_calibration=real_world_calibration,
-            in_game_sens=in_game_sens,
-            os_mouse_speed=os_mouse_speed,
-            **kwargs,
-        )
+                if self.o:
+                    event = InputEvent(None, EventType.UPDATE, result)
+                    self.o.handle_input(event, graph=graph, pad=pad)
 
     def to_node(
         self, root_graph: ControlGraph, on: MapSource | None = None

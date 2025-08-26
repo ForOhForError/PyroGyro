@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 import sdl3
 import vgamepad as vg
 
-import pyrogyro
-import pyrogyro.pyrogyro
 from pyrogyro.constants import DEFAULT_POLL_RATE
 from pyrogyro.gamepad_motion import GyroCalibration, sensor_fusion_gravity
 from pyrogyro.io_types import *

@@ -78,14 +78,14 @@ gyro:
 
 ## Development
 
-You'll need [Poetry](https://python-poetry.org/) and a working Python environment (3.11 and up)
+You'll need [uv](https://docs.astral.sh/uv/) and a working Python environment (3.11 and up)
 
 * Clone the repo:  
  `git clone https://github.com/ForOhForError/PyroGyro`
 * Install dependencies:  
- `poetry install --with=dev`  
+ `uv sync`
  (should pull Windows DLLs in as necessary)
 * Run from working tree:  
- `poetry run pyrogyro`
+ `uv run pyrogyro`
 * Build (to Windows executable):  
- `poetry run dist`
+ `uv run dist`

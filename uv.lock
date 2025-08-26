@@ -353,6 +353,12 @@ wheels = [
 ]
 
 [[package]]
+name = "libevdev"
+version = "0.12"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/61/6b/e0193f4ba0c3b7d20f8f1b961793d39df5538451c0959abb115020d4ec2d/libevdev-0.12.tar.gz", hash = "sha256:02e952632ec6c249cbb9c66f6fa00012ea448b06606c77cd139133bc2fe46b08", size = 27214, upload-time = "2025-05-29T09:08:29.331Z" }
+
+[[package]]
 name = "macholib"
 version = "1.16.3"
 source = { registry = "https://pypi.org/simple" }
@@ -895,6 +901,7 @@ source = { editable = "." }
 dependencies = [
     { name = "flask" },
     { name = "flask-sock" },
+    { name = "libevdev", marker = "sys_platform == 'linux'" },
     { name = "psutil" },
     { name = "pyautogui" },
     { name = "pydantic" },
@@ -913,6 +920,7 @@ dev = [
 requires-dist = [
     { name = "flask", specifier = ">=3.1.0,<4" },
     { name = "flask-sock", specifier = ">=0.7.0,<0.8" },
+    { name = "libevdev", marker = "sys_platform == 'linux'", specifier = ">=0.12" },
     { name = "psutil", specifier = ">=6.1.1,<7" },
     { name = "pyautogui", specifier = ">=0.9.54,<0.10" },
     { name = "pydantic", specifier = ">=2.10.6,<3" },
@@ -1095,6 +1103,9 @@ wheels = [
 name = "vgamepad"
 version = "0.1.0"
 source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "libevdev" },
+]
 sdist = { url = "https://files.pythonhosted.org/packages/8a/54/0eaddc33f84247963af078f364b37153d09fcd6cdc398f243ec3e8842c56/vgamepad-0.1.0.tar.gz", hash = "sha256:57f6bd01aec0c172947517fb782d150ef9b285f7f4d524c317374fa5c24a89de", size = 1174896, upload-time = "2023-10-14T20:29:06.154Z" }
 
 [[package]]

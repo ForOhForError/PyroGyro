@@ -1,40 +1,41 @@
-[tool.poetry]
+[project]
 name = "pyrogyro"
 version = "0.0.2"
 description = "Yet Another (Gyro) Gamepad Mapper, written in Python for hackability"
-authors = ["ForOhForError"]
-packages = [{include = "pyrogyro"}]
+authors = [{ name = "ForOhForError" }]
+requires-python = ">=3.11,<3.14"
 readme = "README.md"
+dependencies = [
+    "pysdl3==0.9.8b7",
+    "vgamepad>=0.1.0,<0.2",
+    "pyautogui>=0.9.54,<0.10",
+    "flask>=3.1.0,<4",
+    "flask-sock>=0.7.0,<0.8",
+    "pydantic>=2.10.6,<3",
+    "ruamel-yaml>=0.18.10,<0.19",
+    "psutil>=6.1.1,<7",
+    "pydirectinput>=1.0.4,<2",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.14"
-pysdl3 = "0.9.8b7"
-vgamepad = "^0.1.0"
-pyautogui = "^0.9.54"
-flask = "^3.1.0"
-flask-sock = "^0.7.0"
-pydantic = "^2.10.6"
-ruamel-yaml = "^0.18.10"
-psutil = "^6.1.1"
-pydirectinput = "^1.0.4"
-
-[tool.poetry.scripts]
+[project.scripts]
 pyrogyro = "pyrogyro.pyrogyro:appmain"
 dist = "pyrogyro.project_util:build_windows_dist"
-lint = "pyrogyro.project_util:lint_code"
 gen-configs = "pyrogyro.mapping:generate_default_mapping_files"
 
-[tool.poetry.group.dev.dependencies]
-pyinstaller = "^6.11.1"
-black = "^24.10.0"
-isort = "^5.13.2"
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.11.1,<7"
+]
 
-[tool.isort]
-profile = "black"
+[tool.hatch.build.targets.sdist]
+include = ["pyrogyro"]
+
+[tool.hatch.build.targets.wheel]
+include = ["pyrogyro"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pyright]
 reportInvalidTypeForm = false
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

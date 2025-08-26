@@ -24,9 +24,9 @@ class ControlNode:
 
     def print_structure(self, space_level=0, log_level=logging.DEBUG):
         if self.always_active:
-            logging.log(log_level, f"{' '*space_level}(Always Active)")
+            logging.log(log_level, f"{' ' * space_level}(Always Active)")
         else:
-            logging.log(log_level, f"{' '*space_level}{self.on} -> {self.do}")
+            logging.log(log_level, f"{' ' * space_level}{self.on} -> {self.do}")
         for child in self.children:
             child.print_structure(space_level=space_level + 1, log_level=log_level)
 
@@ -77,14 +77,21 @@ class ControlNode:
             for child in self.get_children():
                 child.pre_process(event_list)
 
-    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad, delta_time: float = 0.0):
+    def process(
+        self,
+        event_list: typing.List[pyrogyro.io_types.InputEvent],
+        pad,
+        delta_time: float = 0.0,
+    ):
         if self.active or self.always_active:
             for event in event_list:
                 if event.source == self.on and event.is_processable:
                     if self.do:
                         self.do.handle_input(event, graph=self.root_graph, pad=pad)
             if self.do:
-                self.do.handle_tick(delta_time=delta_time, graph=self.root_graph, pad=pad)
+                self.do.handle_tick(
+                    delta_time=delta_time, graph=self.root_graph, pad=pad
+                )
             for child in self.get_children():
                 child.process(event_list, pad, delta_time=delta_time)
 
@@ -112,7 +119,12 @@ class ControlGraph:
     def set_main_layer(self, main_layer: ControlNode):
         self.main_layer = main_layer
 
-    def process(self, event_list: typing.List[pyrogyro.io_types.InputEvent], pad, delta_time: float = 0.0):
+    def process(
+        self,
+        event_list: typing.List[pyrogyro.io_types.InputEvent],
+        pad,
+        delta_time: float = 0.0,
+    ):
         self.main_layer.pre_process(event_list)
         for layer in self.layers.values():
             layer.pre_process(event_list)

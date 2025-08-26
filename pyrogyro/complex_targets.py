@@ -10,7 +10,7 @@ from pyrogyro.io_types import (
     register_map_target,
     to_bool,
     InputEvent,
-    EventType
+    EventType,
 )
 from pyrogyro.math import Vec2
 
@@ -97,13 +97,13 @@ class AsAim(ComplexTargetBase, GraphComponent):
             vel_vec.y * input_value.y * (-1 if self.invert_y else 1),
         )
         return vel_vec
-    
+
     def handle_input(self, event, graph=None, pad=None):
         input_value = event.value
         if isinstance(input_value, Vec2):
             self._input_vec.set_value(input_value.x, input_value.y)
-        
-    def handle_tick(self, delta_time: float=0.0, graph=None, pad=None):
+
+    def handle_tick(self, delta_time: float = 0.0, graph=None, pad=None):
         if pad:
             real_world_calibration = pad.mapping.get_real_world_calibration()
             in_game_sens = pad.mapping.get_in_game_sens()

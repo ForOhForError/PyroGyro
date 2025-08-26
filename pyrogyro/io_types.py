@@ -37,8 +37,8 @@ def enum_or_by_name(T):
 class Processable:
     def handle_input(self, event, graph=None, pad=None):
         logging.debug(f"processing {self} - {event}")
-        
-    def handle_tick(self, delta_time: float=0.0, graph=None, pad=None):
+
+    def handle_tick(self, delta_time: float = 0.0, graph=None, pad=None):
         pass
 
 

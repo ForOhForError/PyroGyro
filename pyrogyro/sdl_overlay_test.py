@@ -5,7 +5,6 @@ from sdl3 import *
 
 
 def main():
-
     win_name = ctypes.c_char_p(b"Hello GL")
 
     SDL_Init(SDL_INIT_VIDEO)

@@ -239,7 +239,9 @@ class PyroGyroMapper:
         gamepad_ignore_hint = ",".join(
             [f"{vidpid[0]:#06x}/{vidpid[1]:#06x}" for vidpid in VID_PID_IGNORE_LIST]
         )
-        sdl3.SDL_SetHint(sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, gamepad_ignore_hint.encode())  # type: ignore
+        sdl3.SDL_SetHint(
+            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, gamepad_ignore_hint.encode()
+        )  # type: ignore
 
         sdl_init_flags = (
             sdl3.SDL_INIT_VIDEO

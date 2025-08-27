@@ -925,7 +925,7 @@ requires-dist = [
     { name = "pyautogui", specifier = ">=0.9.54,<0.10" },
     { name = "pydantic", specifier = ">=2.10.6,<3" },
     { name = "pydirectinput", specifier = ">=1.0.4,<2" },
-    { name = "pysdl3", specifier = "==0.9.8b7" },
+    { name = "pysdl3", specifier = "==0.9.8b9" },
     { name = "ruamel-yaml", specifier = ">=0.18.10,<0.19" },
     { name = "vgamepad", specifier = ">=0.1.0,<0.2" },
 ]
@@ -944,16 +944,16 @@ sdist = { url = "https://files.pythonhosted.org/packages/ee/f0/cb456ac4f1a73723d
 
 [[package]]
 name = "pysdl3"
-version = "0.9.8b7"
+version = "0.9.8b9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "packaging" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/ac/a4cf3e942385daf981bfe1dc4cbd9c596e6eba92ee6ae0b7c3874d547d95/pysdl3-0.9.8b7.tar.gz", hash = "sha256:f6d93da13c66640286720cb7a8ee7d251ba1971f37f398b85b82e345f2e6a6d5", size = 1416984, upload-time = "2025-07-23T16:34:08.646Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/3b/c063bf83cb50424d6c722adfcd9f4f12fa180e2ee6497a650e80f9024342/pysdl3-0.9.8b9.tar.gz", hash = "sha256:da05e644079934cd96c32acb7d3edb107856bdaf3b43ff4f0b5e8af986dc18c4", size = 1417052, upload-time = "2025-08-20T18:30:29.778Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/95/d7f3a3d84551c8ff47ad5ed0e5d2d4b9e08ea905b14946b7f7f5a61e1d5d/pysdl3-0.9.8b7-py3-none-any.whl", hash = "sha256:5bd2e21b9f6097c3693439267a831fa700eb989a74e65ad2bb342cfbd98a5821", size = 94293, upload-time = "2025-07-23T16:34:07.056Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/ac/066b8a88d4f1225c45ee7a224a0cba0f59b0b89d216f4a2832e29f258234/pysdl3-0.9.8b9-py3-none-any.whl", hash = "sha256:5b47454d78192a87f9c5aadea475cf8b3e72caa0e9237fa2d692591cdad84c91", size = 95074, upload-time = "2025-08-20T18:30:28.756Z" },
 ]
 
 [[package]]
@@ -1103,9 +1103,6 @@ wheels = [
 name = "vgamepad"
 version = "0.1.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "libevdev" },
-]
 sdist = { url = "https://files.pythonhosted.org/packages/8a/54/0eaddc33f84247963af078f364b37153d09fcd6cdc398f243ec3e8842c56/vgamepad-0.1.0.tar.gz", hash = "sha256:57f6bd01aec0c172947517fb782d150ef9b285f7f4d524c317374fa5c24a89de", size = 1174896, upload-time = "2023-10-14T20:29:06.154Z" }
 
 [[package]]

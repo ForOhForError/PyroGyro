@@ -114,7 +114,7 @@ class PyroGyroPad:
         sdl_joystick,
         mapping: Mapping | None = None,
         web_server: WebServer | None = None,
-        parent: typing.Union["pyrogyro.pyrogyro.PyroGyroMapper", None] = None,
+        parent: typing.Union["pyrogyro.pyrogyro.PyroGyroMapper", None] = None,  # type: ignore
     ):
         self.parent = parent
         self.logger = logging.getLogger("PyroGyroPad")
@@ -124,7 +124,7 @@ class PyroGyroPad:
         self.web_server = web_server
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
-        self.vpad.register_notification(callback_function=self.virtual_pad_callback)
+        self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
         self.led = LerpableLED().set_sequence(
             ROYGBIV,
             color_space=ColorSpace.HSV,
@@ -379,17 +379,18 @@ class PyroGyroPad:
                         )
                         this_value = axis_event.value / 32768.0
                         other_value = self.paired_axis_event_sink.get(other_axis)
-                        if double_enum.value.index(enum_val) == 0:
-                            target_value = Vec2(this_value, other_value)
-                        else:
-                            target_value = Vec2(other_value, this_value)
-                        paired_event = InputEvent(
-                            double_enum,
-                            EventType.UPDATE,
-                            target_value,
-                            timestamp=timestamp,
-                        )
-                        self.input_store.put_input(paired_event)
+                        if other_value:
+                            if double_enum.value.index(enum_val) == 0:
+                                target_value = Vec2(this_value, other_value)
+                            else:
+                                target_value = Vec2(other_value, this_value)
+                            paired_event = InputEvent(
+                                double_enum,
+                                EventType.UPDATE,
+                                target_value,
+                                timestamp=timestamp,
+                            )
+                            self.input_store.put_input(paired_event)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
                 sensor_type = sensor_event.sensor

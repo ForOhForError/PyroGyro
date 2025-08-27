@@ -132,12 +132,10 @@ class MouseButtonTarget(Processable, enum.Enum):
     MMOUSE = MIDDLE
 
     def up(self):
-        pass
-        # mouseUp(button=self.value)
+        mouseUp(button=self.value)
 
     def down(self):
-        pass
-        # mouseDown(button=self.value)
+        mouseDown(button=self.value)
 
     def handle_input(
         self, event, graph=None, pad: typing.ForwardRef("PyroGyroPad") | None = None

@@ -145,14 +145,11 @@ def to_node(
         for sub_entry_key, sub_entry in entry.items():
             root.add_child(to_node(sub_entry, root_graph, on=sub_entry_key))
     elif isinstance(entry, GraphComponent):
-        root.add_child(entry.to_node(root_graph, on=on))
+        root.add_child(entry)
     else:
         root.do = entry
     return root
 
 
-class GraphComponent:
-    def to_node(
-        self, root_graph: ControlGraph, on: pyrogyro.io_types.MapSource | None = None
-    ) -> ControlNode:
-        raise NotImplementedError()
+class GraphComponent(pyrogyro.io_types.Processable, ControlNode):
+    pass

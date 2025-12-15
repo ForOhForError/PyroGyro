@@ -1,3 +1,4 @@
+import logging
 import typing
 
 from pyrogyro.control_graph import ControlGraph, ControlNode, GraphComponent
@@ -5,6 +6,7 @@ from pyrogyro.io_types import (
     BasicMappingOrListOfMappings,
     ComplexTargetBase,
     MapDirectTarget,
+    MouseTarget,
     MapSource,
     MapTarget,
     register_map_target,
@@ -21,7 +23,7 @@ def resolve_outputs(*args, **kwargs):
     return {}
 
 
-class MapComplexTarget(ComplexTargetBase):
+class MapComplexTarget(ComplexTargetBase, ControlNode):
     output: MapDirectTarget
     on: str
 
@@ -29,7 +31,7 @@ class MapComplexTarget(ComplexTargetBase):
         return hash((self.output, self.on))
 
 
-class AndTarget(ComplexTargetBase):
+class AndTarget(ComplexTargetBase, ControlNode):
     AND: BasicMappingOrListOfMappings
 
     def map_to_outputs(self, input_value, **kwargs):
@@ -42,7 +44,7 @@ class AndTarget(ComplexTargetBase):
 
 class AsAim(ComplexTargetBase, GraphComponent):
     map_as: typing.Literal["AIM"]
-    o: MapTarget
+    target: MapTarget = MouseTarget
     sens: typing.Union[float, typing.Tuple[float, float]] = 360.0
     power: float = 1.0
     invert_x: bool = False
@@ -99,6 +101,7 @@ class AsAim(ComplexTargetBase, GraphComponent):
         return vel_vec
 
     def handle_input(self, event, graph=None, pad=None):
+        logging.info(event)
         input_value = event.value
         if isinstance(input_value, Vec2):
             self._input_vec.set_value(input_value.x, input_value.y)
@@ -125,14 +128,17 @@ class AsAim(ComplexTargetBase, GraphComponent):
                         self._accel_mult + (delta_time * self.accel_rate),
                         self.accel_cap,
                     )
-                if self.o:
+                if self.target:
                     event = InputEvent(None, EventType.UPDATE, result)
-                    self.o.handle_input(event, graph=graph, pad=pad)
+                    self.target.handle_input(event, graph=graph, pad=pad)
 
-    def to_node(
-        self, root_graph: ControlGraph, on: MapSource | None = None
-    ) -> ControlNode:
-        return ControlNode(root_graph, on=on, do=self)
+    # def to_node(
+    #     self, root_graph: ControlGraph, on: MapSource | None = None
+    # ) -> ControlNode:
+    #     self.on = on
+    #     self.root_graph = root_graph
+    #     logging.info(f"RETURNING NODE FOR {self.on}")
+    #     return self
 
 
 class AsDpad(ComplexTargetBase):

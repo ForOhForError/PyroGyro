@@ -1,5 +1,3 @@
-import colorsys
-import enum
 import logging
 import re
 import typing
@@ -15,26 +13,7 @@ from pyrogyro.io_types import *
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
 from pyrogyro.web import WebServer
-
-ROYGBIV = (
-    Vec3(x=0, y=1, z=1),
-    Vec3(x=1, y=1, z=1),
-)
-
-
-class ColorSpace(enum.Enum):
-    RGB = "RGB"
-    HSV = "HSV"
-
-    def to_rgb(self, in_color: Vec3):
-        match self.value:
-            case self.HSV.value:
-                rgb = colorsys.hsv_to_rgb(in_color.x, in_color.y, in_color.z)
-                return Vec3(x=rgb[0], y=rgb[1], z=rgb[2])
-            case self.RGB.value:
-                return in_color
-        return in_color
-
+from pyrogyro.color_led import LerpableLED, ColorSpace
 
 @dataclass
 class InputStore:
@@ -48,64 +27,6 @@ class InputStore:
 
     def clear(self):
         self._inputs.clear()
-
-
-@dataclass
-class LerpableLED:
-    current_color: Vec3 = field(default_factory=Vec3)
-    color_sequence: typing.Sequence[Vec3] = field(default_factory=list)
-    index_start: int = 0
-    index_end: int = 0
-    start_ts: typing.Optional[int] = None
-    duration_per_color: float = 1
-    color_space: ColorSpace = ColorSpace.RGB
-    instant_loop: bool = False
-
-    def set_sequence(
-        self,
-        color_sequence: typing.Sequence[Vec3],
-        color_space=ColorSpace.RGB,
-        duration_per_color=1,
-        instant_loop=False,
-    ):
-        self.instant_loop = instant_loop
-        self.color_sequence = color_sequence
-        self.color_space = color_space
-        self.index_start = 0
-        self.duration_per_color = duration_per_color
-        if len(self.color_sequence) > 1:
-            self.index_end = 1
-        else:
-            self.index_end = 0
-        return self
-
-    def update(self, timestamp):
-        if self.start_ts == None:
-            self.start_ts = timestamp
-        time_delta = timestamp - self.start_ts
-        if self.duration_per_color == 0:
-            delta = 0
-        else:
-            delta = time_delta / self.duration_per_color
-        start, end = (
-            self.color_sequence[self.index_start],
-            self.color_sequence[self.index_end],
-        )
-        self.current_color.set_lerp(start, end, delta)
-        if delta >= 1.0:
-            self.index_start = self.index_start + 1
-            self.index_end = self.index_end + 1
-            len_seq = len(self.color_sequence)
-            if self.index_start == len_seq - 1 and self.instant_loop:
-                self.index_start = 0
-                self.index_end = 1 if len_seq > 1 else 0
-            else:
-                self.index_start = self.index_start % len_seq
-                self.index_end = self.index_end % len_seq
-            self.start_ts = timestamp
-
-    def get_rgb_color(self):
-        return self.color_space.to_rgb(self.current_color)
 
 
 class PyroGyroPad:
@@ -125,12 +46,7 @@ class PyroGyroPad:
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
         self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
-        self.led = LerpableLED().set_sequence(
-            ROYGBIV,
-            color_space=ColorSpace.HSV,
-            duration_per_color=10,
-            instant_loop=True,
-        )
+        self.led = mapping.led
         self.gyro_calibrating = False
         self.gyro_calibration = GyroCalibration()
         self.last_timestamp = None
@@ -261,6 +177,7 @@ class PyroGyroPad:
                 f"Applying mapping '{new_mapping.name}' to PyroGyro pad for controller '{controller_name}'"
             )
             self.mapping = new_mapping
+            self.led = self.mapping.led
             self.mapping.reset()
 
     def set_gyro_calibrating(self, calibrating: bool):
@@ -460,7 +377,7 @@ class PyroGyroPad:
             sensor_fusion_gravity(
                 self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
             )
-            pixel_vel = self.mapping.gyro.mode.gyro_pixels(
+            pixel_vel = self.mapping.gyro.gyro_pixels(
                 self.gyro_vec,
                 self.gravity.normalized(),
                 adjusted_delta,

@@ -1,0 +1,33 @@
+
+
+name = "Default Xbox Controller"
+
+[ autoload ]
+#match_exe_name = ".*"
+#match_window_name = ".*"
+#match_controller_name = ".*"
+
+[ mapping ]
+N = "X_Y"
+S = "X_A"
+E = "X_B"
+W = "X_X"
+BACK = "X_BACK"
+START = "X_START"
+UP = "X_UP"
+DOWN = "X_DOWN"
+LEFT = "X_LEFT"
+RIGHT = "X_RIGHT"
+L1 = "X_L1"
+R1 = "X_R1"
+L3 = "X_L3"
+R3 = "X_R3"
+GUIDE = "X_GUIDE"
+L2 = "X_L2"
+R2 = "X_R2"
+LSTICK = "X_LSTICK"
+RSTICK = "X_RSTICK"
+
+#[ mapping.LSTICK ]
+#map_as = "AIM"
+#o = "MOUSE"

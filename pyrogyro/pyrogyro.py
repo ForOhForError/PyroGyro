@@ -96,17 +96,17 @@ class PyroGyroMapper:
         self.sdl_joysticks = {}
 
     def refresh_autoload_mappings(self):
-        config_path_list = set(Path("configs").rglob("*.yml"))
+        config_path_list = set(Path("configs").rglob("*.toml"))
         for config_path in config_path_list:
             mod_time = os.path.getmtime(config_path)
             if (
                 config_path not in self.autoload_configs
                 or self.autoload_configs[config_path][1] != mod_time
             ):
-                with open(config_path) as config_handle:
+                with open(config_path, "rb") as config_handle:
                     try:
                         mapping: Mapping = Mapping.load_from_file(
-                            file_handle=config_path
+                            file_handle=config_handle
                         )
                         if mapping.autoload != None:
                             self.logger.debug(
@@ -140,11 +140,11 @@ class PyroGyroMapper:
                             f"Error parsing config {config_path}; skipping"
                         )
                         self.logger.debug(f"{scanner_error}")
-                    except Exception as other_error:
-                        self.logger.info(
-                            f"Unknown error loading config {config_path}; skipping"
-                        )
-                        self.logger.debug(f"{type(other_error)}: {other_error}")
+                    #except Exception as other_error:
+                    #    self.logger.info(
+                    #        f"Unknown error loading config {config_path}; skipping"
+                    #    )
+                    #    self.logger.debug(f"{type(other_error)}: {other_error}")
         to_remove = []
         for config_path in self.autoload_configs:
             if config_path not in config_path_list:

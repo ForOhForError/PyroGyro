@@ -2,36 +2,36 @@ import logging
 import typing
 
 import pyrogyro.io_types
+from pydantic import BaseModel, Field
 
 
-class ControlNode:
+class ControlNode(BaseModel):
+    root_graph: typing.Any = None
+    on: pyrogyro.io_types.MapSource = None
+    do: pyrogyro.io_types.MapTarget = None
+    always_active: bool = False
+    active: bool = False
+    deactivate_after_process: bool = False
+    
     def __init__(
-        self,
-        root_graph: "ControlGraph",
-        on: pyrogyro.io_types.MapSource = None,
-        do: pyrogyro.io_types.MapTarget = None,
-        always_active=False,
+        self, *args, **kwargs
     ):
-        self.root_graph = root_graph
-        self.children: typing.List[ControlNode] = []
-        self.on = on
-        self.do = do
-        self.always_active = always_active
-        self.active = False
+        super().__init__(*args,**kwargs)
+        self._children: typing.List["ControlNode"] = []
 
     def get_children(self):
-        return self.children
+        return self._children
 
     def print_structure(self, space_level=0, log_level=logging.DEBUG):
         if self.always_active:
             logging.log(log_level, f"{' ' * space_level}(Always Active)")
         else:
             logging.log(log_level, f"{' ' * space_level}{self.on} -> {self.do}")
-        for child in self.children:
+        for child in self.get_children():
             child.print_structure(space_level=space_level + 1, log_level=log_level)
 
     def add_child(self, child: "ControlNode"):
-        self.children.append(child)
+        self._children.append(child)
 
     def add_from_layer(self, layer):
         root_map = layer.mapping
@@ -39,7 +39,7 @@ class ControlNode:
             for entry in root_map:
                 if isinstance(entry, pyrogyro.io_types.DetailedMapping):
                     node = ControlNode(self.root_graph, entry.input, entry.output)
-                    self.children.append(node)
+                    self._children.append(node)
                 else:
                     for subentry_key, subentry_value in entry.items():
                         if isinstance(subentry_value, typing.Sequence):
@@ -47,21 +47,21 @@ class ControlNode:
                                 node = ControlNode(
                                     self.root_graph, subentry_key, final_value
                                 )
-                                self.children.append(node)
+                                self._children.append(node)
                         else:
                             node = ControlNode(
                                 self.root_graph, subentry_key, subentry_value
                             )
-                            self.children.append(node)
+                            self._children.append(node)
         else:
             for entry_key, entry_value in root_map.items():
                 if isinstance(entry_value, typing.Sequence):
                     for final_value in entry_value:
                         node = ControlNode(self.root_graph, entry_key, final_value)
-                        self.children.append(node)
+                        self._children.append(node)
                 else:
                     node = ControlNode(self.root_graph, entry_key, entry_value)
-                    self.children.append(node)
+                    self._children.append(node)
 
     def pre_process(self, event_list: typing.List[pyrogyro.io_types.InputEvent]):
         if not self.always_active:
@@ -70,14 +70,17 @@ class ControlNode:
                     if event.event_type == pyrogyro.io_types.EventType.PRESS:
                         self.active = True
                     elif event.event_type == pyrogyro.io_types.EventType.RELEASE:
-                        self.active = False
+                        self.deactivate_after_process = True
                     elif event.event_type == pyrogyro.io_types.EventType.UPDATE:
                         self.active = True
         if self.active or self.always_active:
             for child in self.get_children():
                 child.pre_process(event_list)
 
-    def process(
+    def should_process_event_input(self, event):
+        return event.source == self.on and event.is_processable
+
+    def process_event(
         self,
         event_list: typing.List[pyrogyro.io_types.InputEvent],
         pad,
@@ -85,15 +88,19 @@ class ControlNode:
     ):
         if self.active or self.always_active:
             for event in event_list:
-                if event.source == self.on and event.is_processable:
+                if self.should_process_event_input(event):
                     if self.do:
-                        self.do.handle_input(event, graph=self.root_graph, pad=pad)
+                        self.do.process_input(event, graph=self.root_graph, pad=pad)
             if self.do:
                 self.do.handle_tick(
                     delta_time=delta_time, graph=self.root_graph, pad=pad
                 )
             for child in self.get_children():
-                child.process(event_list, pad, delta_time=delta_time)
+                child.process_event(event_list, pad, delta_time=delta_time)
+            
+            if self.deactivate_after_process:
+                self.active = False
+                self.deactivate_after_process = False
 
 
 class ControlGraph:
@@ -128,7 +135,7 @@ class ControlGraph:
         self.main_layer.pre_process(event_list)
         for layer in self.layers.values():
             layer.pre_process(event_list)
-        self.main_layer.process(event_list, pad, delta_time=delta_time)
+        self.main_layer.process_event(event_list, pad, delta_time=delta_time)
         for layer in self.layers.values():
             layer.process(event_list, pad, delta_time=delta_time)
 
@@ -145,6 +152,8 @@ def to_node(
         for sub_entry_key, sub_entry in entry.items():
             root.add_child(to_node(sub_entry, root_graph, on=sub_entry_key))
     elif isinstance(entry, GraphComponent):
+        entry.on = on
+        entry.root_graph = root_graph
         root.add_child(entry)
     else:
         root.do = entry

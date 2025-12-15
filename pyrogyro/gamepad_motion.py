@@ -162,8 +162,8 @@ class GyroMode(enum.Enum):
 
 @dataclass
 class GyroConfig:
-    gyro_mode: enum_or_by_name(GyroMode) = GyroMode.OFF
-    gyro_sens: float | typing.Tuple[float, float] = 1.0
+    mode: enum_or_by_name(GyroMode) = GyroMode.OFF
+    sens: float | typing.Tuple[float, float] = 1.0
     fast_sens: typing.Optional[float | typing.Tuple[float, float]] = None
     slow_threshold: float = 0.0
     fast_threshold: float = 0.0
@@ -213,10 +213,10 @@ class GyroConfig:
         return sample
 
     def get_slow_sens(self):
-        if isinstance(self.gyro_sens, (float, int)):
-            return self.gyro_sens, self.gyro_sens
+        if isinstance(self.sens, (float, int)):
+            return self.sens, self.sens
         else:
-            return self.gyro_sens
+            return self.sens
 
     def get_fast_sens(self):
         if self.fast_sens:
@@ -244,7 +244,7 @@ class GyroConfig:
         )
 
     def gyro_camera(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
-        match self.gyro_mode:
+        match self.mode:
             case GyroMode.OFF:
                 calibrated_gyro = Vec2(0, 0)
             case GyroMode.LOCAL:

@@ -1,12 +1,10 @@
 import base64
 import shutil
 import subprocess
-import sys
 import tempfile
 import zipfile
 import os
 from pathlib import Path
-import logging
 
 import urllib.request
 
@@ -40,7 +38,7 @@ def download_sdl_binary(
         )
     ):
         download_url = f"https://github.com/libsdl-org/SDL{library}/releases/download/release-{version}/SDL3{library}-{version}-{platform}-{arch}.zip"
-        logging.info(f"Downloading SDL{library} {version} ({platform}/{arch})")
+        print(f"Downloading SDL{library} {version} ({platform}/{arch})")
         local_filename, _ = urllib.request.urlretrieve(download_url)
         with zipfile.ZipFile(local_filename) as libzip:
             libzip.extract(f"SDL3{library}{binary_filetype}", path=sdl_binary_path)

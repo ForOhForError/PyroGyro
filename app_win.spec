@@ -30,6 +30,7 @@ path_vigem_client = Path(vgamepad.__file__).parent.absolute() / "win" / "vigem" 
 
 a = Analysis(
     ['pyrogyro\\pyrogyro.py'],
+    pathex=[Path(sdl3.__file__).parent.absolute()],
     binaries=[
         (path_vigem_client, '.')
     ],

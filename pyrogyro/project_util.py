@@ -8,6 +8,8 @@ from pathlib import Path
 
 import urllib.request
 
+import logging
+
 VAR_B64_ENCODED_CERT = "B64_ENCODED_CERT"
 VAR_CERT_PASSWORD = "CERT_PASSWORD"
 
@@ -38,7 +40,7 @@ def download_sdl_binary(
         )
     ):
         download_url = f"https://github.com/libsdl-org/SDL{library}/releases/download/release-{version}/SDL3{library}-{version}-{platform}-{arch}.zip"
-        print(f"Downloading SDL{library} {version} ({platform}/{arch})")
+        logging.info(f"Downloading SDL{library} {version} ({platform}/{arch})")
         local_filename, _ = urllib.request.urlretrieve(download_url)
         with zipfile.ZipFile(local_filename) as libzip:
             libzip.extract(f"SDL3{library}{binary_filetype}", path=sdl_binary_path)
@@ -80,11 +82,12 @@ def download_sdl():
 
 
 def build_windows_dist():
+    logging.basicConfig(level=logging.INFO)
     setup_pysdl_env_vars()
     download_sdl_binaries(force_overwrite=True)
     import PyInstaller.__main__
 
-    print("Running PyInstaller")
+    logging.info("Running PyInstaller")
     PyInstaller.__main__.run(["--clean", "--noconfirm", "app_win.spec"])
 
     b64_cert, cert_pw = os.getenv(VAR_B64_ENCODED_CERT), os.getenv(VAR_CERT_PASSWORD)
@@ -114,7 +117,7 @@ def build_windows_dist():
     with zipfile.ZipFile("dist/pyrogyro.zip", "w", zipfile.ZIP_BZIP2) as zip_file:
         dist_dir = Path("dist/pyrogyro")
         config_dir = Path("configs")
-        sdl3_dir = Path("sdl3/bin")
+        sdl3_dir = Path("bin/sdl3")
         for entry in config_dir.rglob("*"):
             zip_file.write(entry, entry.relative_to(config_dir.parent))
         for entry in sdl3_dir.rglob("*"):

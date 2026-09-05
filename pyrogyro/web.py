@@ -7,7 +7,12 @@ from flask import cli as flask_cli
 from flask import render_template, send_file
 from flask_sock import Sock
 
-from pyrogyro.constants import DEBUG, ROOT_DIR, icon_location
+from pyrogyro.constants import DEBUG, ROOT_DIR, resource_location
+
+import mimetypes
+
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 5000
@@ -57,10 +62,10 @@ class WebServer:
                 ws.send(json.dumps(message_obj))
 
     def index(self):
-        return render_template("display.html", host=self.host, port=self.port)
+        return send_file(resource_location("web", "static", "index.html"))
 
     def favicon(self):
-        return send_file(icon_location())
+        return send_file(resource_location("pyrogyro2.ico"))
 
     def get_local_url(self):
         return f"http://{self.host}:{self.port}"

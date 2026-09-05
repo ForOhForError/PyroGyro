@@ -13,5 +13,8 @@ VID_PID_IGNORE_LIST = ((1118, 654),)  # Ignore ViGEmBus-mapped virtual devices
 SHOW_STARTUP_VERSION_MODULES = []  # ("pyrogyro", "pysdl3")
 
 
-def icon_location():
-    return (ROOT_DIR / "res" / "pyrogyro2.ico").as_posix()
+def resource_location(*path):
+    final_path = ROOT_DIR / "res"
+    for entry in path:
+        final_path = final_path / entry
+    return final_path.as_posix()

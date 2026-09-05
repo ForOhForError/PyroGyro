@@ -4,8 +4,9 @@ import sys
 import typing
 
 from pydantic import BaseModel, Field
-#from ruamel.yaml import YAML, CommentedMap, CommentedSeq
-import tomllib
+
+# from ruamel.yaml import YAML, CommentedMap, CommentedSeq
+import tomlkit
 
 from pyrogyro.color_led import LerpableLED, get_default_led
 from pyrogyro.complex_targets import register_complex_targets
@@ -28,10 +29,11 @@ from pyrogyro.io_types import (
 )
 from pyrogyro.platform_util import get_os_mouse_speed
 
-#yaml = YAML()
-#yaml.compact(seq_seq=False, seq_map=False)
+# yaml = YAML()
+# yaml.compact(seq_seq=False, seq_map=False)
 
 register_complex_targets()
+
 
 class AutoloadConfig(BaseModel):
     match_exe_name: str = ".*"
@@ -59,7 +61,7 @@ class AutoloadConfig(BaseModel):
 
 class Layer(GraphComponent):
     mapping: "BasicMappingOrListOfMappings" = Field(
-        #default_factory=CommentedMap
+        # default_factory=CommentedMap
         default_factory=dict
     )
     gyro: GyroConfig = Field(default_factory=GyroConfig)
@@ -109,12 +111,10 @@ class Mapping(Layer):
     name: str = "Default Mapping"
     autoload: typing.Optional[AutoloadConfig] = None
     layers: collections.abc.Mapping[str, Layer] = Field(
-        #default_factory=CommentedMap
+        # default_factory=CommentedMap
         default_factory=dict
     )
-    led: LerpableLED = Field(
-        default_factory=get_default_led
-    )
+    led: LerpableLED = Field(default_factory=get_default_led)
     real_world_calibration: typing.Optional[float] = None
     in_game_sens: typing.Optional[float] = None
     counter_os_mouse_speed: typing.Optional[bool] = False
@@ -182,6 +182,7 @@ class Mapping(Layer):
 
     def save_to_file(self, file_handle=sys.stdout):
         obj_out_direct = self.model_dump(exclude_none=True, exclude_unset=True)
+        print(obj_out_direct)
         obj_out_sorted = {}
         for key in _MAPPING_FIELD_ORDER:
             if key in obj_out_direct:
@@ -193,11 +194,11 @@ class Mapping(Layer):
             # commented_out = CommentedMap(obj_out_sorted)
             # commented_out = commented_out.copy_attributes(self._loaded_yml_map)
             # obj_out_sorted = commented_out
-        tomllib.dump(obj_out_sorted, file_handle)
+        tomlkit.dump(obj_out_sorted, file_handle)
 
     @classmethod
     def load_from_file(cls, file_handle=sys.stdin):
-        parsed_from_file = tomllib.load(file_handle)
+        parsed_from_file = tomlkit.load(file_handle)
         constructed_mapping = cls.model_validate(parsed_from_file)
         constructed_mapping._loaded_yml_map = parsed_from_file
         graph = constructed_mapping._control_graph
@@ -244,5 +245,5 @@ def get_default_xbox_mapping():
 
 def generate_default_mapping_files():
     xbox_config = get_default_xbox_mapping()
-    with open("configs/default_xbox.yml", "w") as xbox_config_file:
+    with open("configs/default_xbox.toml", "w") as xbox_config_file:
         xbox_config.save_to_file(xbox_config_file)

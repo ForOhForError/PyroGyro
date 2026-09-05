@@ -15,6 +15,7 @@ from pyrogyro.math import *
 from pyrogyro.web import WebServer
 from pyrogyro.color_led import LerpableLED, ColorSpace
 
+
 @dataclass
 class InputStore:
     _inputs: typing.List[InputEvent] = field(default_factory=list)
@@ -45,6 +46,9 @@ class PyroGyroPad:
         self.web_server = web_server
         self.vpad = vg.VX360Gamepad()
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
+        joystick = sdl3.SDL_GetGamepadJoystick(self.sdl_pad)
+        self.sdl_joy = joystick
+        # self.sdl_haptic = sdl3.SDL_OpenHapticFromJoystick(joystick)
         self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
         self.led = mapping.led
         self.gyro_calibrating = False
@@ -86,6 +90,29 @@ class PyroGyroPad:
 
         self.touchpad_state = {}
         self.touchpad_update = False
+
+    # def try_haptic(self):
+    #     if not self.sdl_haptic:
+    #         logging.debug("no haptic")
+    #         return
+    #     haptic_feat = sdl3.SDL_GetHapticFeatures(self.sdl_haptic)
+    #     if (int(haptic_feat) & sdl3.SDL_HAPTIC_SINE) == 0:
+    #         logging.debug("no haptic sine")
+    #         return
+    #     effect = sdl3.SDL_HapticEffect()
+    #     effect_pointer = sdl3.LP_SDL_HapticEffect(effect)
+    #     effect.type = sdl3.SDL_HAPTIC_SINE
+    #     effect.periodic.direction.type = sdl3.SDL_HAPTIC_POLAR
+    #     effect.periodic.direction.dir[0] = 18000
+    #     effect.periodic.period = 1000
+    #     effect.periodic.magnitude = 20000
+    #     effect.periodic.length = 5000
+    #     effect.periodic.attack_length = 1000
+    #     effect.periodic.fade_length = 1000
+
+    #     effect_id = sdl3.SDL_CreateHapticEffect(self.sdl_haptic, effect_pointer)
+    #     sdl3.SDL_RunHapticEffect(self.sdl_haptic, effect_id, 1)
+    #     logging.debug("haptic done")
 
     @property
     def poll_rate(self):
@@ -323,8 +350,6 @@ class PyroGyroPad:
                     self.last_gyro_time = timestamp
                 elif sensor_type == sdl3.SDL_SENSOR_ACCEL:
                     accel.set_value(*sensor_event.data)
-                else:
-                    print("wuhoh")
                 if self.gyro_calibrating:
                     self.gyro_calibration.update(gyro_raw)
                     self.gyro_update = False
@@ -346,7 +371,9 @@ class PyroGyroPad:
                         self.touchpad_state.pop(key_tuple)
                 else:
                     x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
-                    self.touchpad_state[key_tuple] = Vec2(x, y)
+                    self.touchpad_state[key_tuple] = Vec3(x, y, pressure)
+            case _:
+                self.logger.info("event type: " + str(evt_type))
 
     def send_changed_input_values(self, delta_time: float = 0.0):
         changed_inputs = self.input_store.get_inputs()

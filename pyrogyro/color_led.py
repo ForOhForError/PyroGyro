@@ -10,9 +10,10 @@ HSV_ROYGBIV = (
 )
 
 RGB_PYRO_GYRO = (
-    Vec3(x=55/255.0, y=113/255.0, z=163/255.0),
-    Vec3(x=255/255.0, y=209/255.0, z=65/255.0),
+    Vec3(x=55 / 255.0, y=113 / 255.0, z=163 / 255.0),
+    Vec3(x=255 / 255.0, y=209 / 255.0, z=65 / 255.0),
 )
+
 
 class ColorSpace(enum.Enum):
     RGB = "RGB"
@@ -26,7 +27,8 @@ class ColorSpace(enum.Enum):
             case self.RGB.value:
                 return in_color
         return in_color
-    
+
+
 @dataclass
 class LerpableLED:
     _current_color: Vec3 = field(default_factory=Vec3)
@@ -83,6 +85,7 @@ class LerpableLED:
 
     def get_rgb_color(self):
         return self.color_space.to_rgb(self._current_color)
+
 
 def get_default_led():
     return LerpableLED().set_sequence(

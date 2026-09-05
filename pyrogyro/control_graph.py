@@ -12,11 +12,9 @@ class ControlNode(BaseModel):
     always_active: bool = False
     active: bool = False
     deactivate_after_process: bool = False
-    
-    def __init__(
-        self, *args, **kwargs
-    ):
-        super().__init__(*args,**kwargs)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
         self._children: typing.List["ControlNode"] = []
 
     def get_children(self):
@@ -97,7 +95,7 @@ class ControlNode(BaseModel):
                 )
             for child in self.get_children():
                 child.process_event(event_list, pad, delta_time=delta_time)
-            
+
             if self.deactivate_after_process:
                 self.active = False
                 self.deactivate_after_process = False

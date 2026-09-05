@@ -4,6 +4,7 @@ import dataclasses
 import enum
 import importlib.metadata
 import logging
+import os
 import os.path
 import re
 import sys
@@ -12,6 +13,10 @@ import time
 import typing
 import uuid
 from pathlib import Path
+
+from pyrogyro.project_util import setup_pysdl_env_vars
+
+setup_pysdl_env_vars()
 
 import sdl3
 import vgamepad as vg
@@ -27,7 +32,7 @@ from pyrogyro.constants import (
     LOG_LEVEL,
     SHOW_STARTUP_VERSION_MODULES,
     VID_PID_IGNORE_LIST,
-    icon_location,
+    resource_location,
 )
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
@@ -39,6 +44,8 @@ from pyrogyro.platform_util import (
 from pyrogyro.pyrogyro_pad import PyroGyroPad
 from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
+import pyrogyro.overlay
+
 
 EVENT_TYPES_FILTER = set()
 
@@ -54,6 +61,8 @@ EVENT_TYPES_IGNORE = set(
         sdl3.SDL_EVENT_JOYSTICK_BATTERY_UPDATED,
         sdl3.SDL_EVENT_JOYSTICK_UPDATE_COMPLETE,
         sdl3.SDL_EVENT_GAMEPAD_UPDATE_COMPLETE,
+        sdl3.SDL_EVENT_MOUSE_ADDED,
+        sdl3.SDL_EVENT_KEYBOARD_ADDED,
     )
 )
 
@@ -89,6 +98,7 @@ class PyroGyroMapper:
         self.do_platform_setup()
         self.calibrating = False
         self.web_server = WebServer()
+        self.overlay = pyrogyro.overlay.Overlay()
         self.config_lock = threading.Lock()
 
         self.pyropads = {}
@@ -140,7 +150,7 @@ class PyroGyroMapper:
                             f"Error parsing config {config_path}; skipping"
                         )
                         self.logger.debug(f"{scanner_error}")
-                    #except Exception as other_error:
+                    # except Exception as other_error:
                     #    self.logger.info(
                     #        f"Unknown error loading config {config_path}; skipping"
                     #    )
@@ -177,9 +187,10 @@ class PyroGyroMapper:
 
     def init_systray(self):
         self.logger.info("Starting Tray Icon")
-        self.systray = SystemTray("PyroGyro", icon_location())
+        self.systray = SystemTray("PyroGyro", resource_location("pyrogyro2.ico"))
         self.systray.add_menu_option("Quit", callback=self.on_quit_callback)
         self.systray.add_menu_option("Toggle Console", callback=self.toggle_vis)
+        self.systray.add_menu_option("Toggle Overlay", callback=self.toggle_overlay)
         if self.web_server:
             self.systray.add_menu_option(
                 "Open Web Console", callback=self.web_server.open_web_ui
@@ -214,6 +225,8 @@ class PyroGyroMapper:
                     self.logger.info(" == MAPPABLE KEYS == ")
                     for key in pyrogyro.io_types.KeyboardKeyTarget:  # type: ignore
                         self.logger.info(f" * {key.name}")
+                case com if "overlay".startswith(com.lower()):
+                    self.toggle_overlay()
 
     def console_input_loop(self):
         try:
@@ -223,25 +236,37 @@ class PyroGyroMapper:
         except (EOFError, KeyboardInterrupt):
             pass
 
+    def overlay_loop(self):
+        self.overlay.display_loop()
+
     def start_console_input_thread(self):
         threading.Thread(target=self.console_input_loop, daemon=True).start()
+
+    def start_overlay_thread(self):
+        threading.Thread(target=self.overlay_loop, daemon=True).start()
 
     def toggle_vis(self, *args):
         self.visible = not self.visible
         set_console_visibility(self.visible)
 
+    def toggle_overlay(self, *args):
+        self.overlay.toggle_hidden()
+
     @classmethod
     def init_sdl(cls):
         sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1".encode())  # type: ignore
         sdl3.SDL_SetHint(sdl3.SDL_HINT_GAMECONTROLLER_SENSOR_FUSION, "1".encode())  # type: ignore
+        sdl3.SDL_SetHint(sdl3.SDL_HINT_JOYSTICK_HIDAPI_STEAM, "1".encode())  # type: ignore
+        sdl3.SDL_SetHint(sdl3.SDL_HINT_VIDEO_DOUBLE_BUFFER, "1".encode())  # type: ignore
 
         # The format of the string is a comma separated list of USB VID/PID pairs in hexadecimal form
         gamepad_ignore_hint = ",".join(
             [f"{vidpid[0]:#06x}/{vidpid[1]:#06x}" for vidpid in VID_PID_IGNORE_LIST]
         )
         sdl3.SDL_SetHint(
-            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, gamepad_ignore_hint.encode()
-        )  # type: ignore
+            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES,
+            gamepad_ignore_hint.encode(),  # type: ignore
+        )
 
         sdl_init_flags = (
             sdl3.SDL_INIT_VIDEO
@@ -250,6 +275,16 @@ class PyroGyroMapper:
             | sdl3.SDL_INIT_SENSOR
         )
         sdl3.SDL_Init(sdl_init_flags)  # type: ignore
+        sdl3.TTF_Init()
+
+    def update_devices(self):
+        self.populate_joystick_list()
+        self.create_device_map()
+        if self.window_listener:
+            exe_name, window_title = self.window_listener.get_current_focus()  # type: ignore
+        else:
+            exe_name, window_title = "pyrogyro.exe", "PyroGyro Console"
+        self.autoload_refresh_and_evaluate(exe_name, window_title)
 
     def populate_joystick_list(self, ignore_virtual=True):
         self.logger.info("== Gamepads currently connected: ==")
@@ -332,18 +367,14 @@ class PyroGyroMapper:
                         populate_pads = True
                     case evt_type if evt_type in EVENT_TYPES_IGNORE:
                         pass
+                    case sdl3.SDL_EVENT_QUIT:
+                        self.running = False
                     case _:
                         self.logger.debug(
                             f"fallthrough, ignoring gamepad event of type {hex(event.type)}"  # type: ignore
                         )
             if populate_pads:
-                self.populate_joystick_list()
-                self.create_device_map()
-                if self.window_listener:
-                    exe_name, window_title = self.window_listener.get_current_focus()  # type: ignore
-                else:
-                    exe_name, window_title = "pyrogyro.exe", "PyroGyro Console"
-                self.autoload_refresh_and_evaluate(exe_name, window_title)
+                self.update_devices()
             if self.systray:
                 self.systray.update()
             for pypad in self.pyropads.values():
@@ -360,12 +391,14 @@ class PyroGyroMapper:
         self.init_systray()
         self.init_window_listener()
         self.start_console_input_thread()
+        self.start_overlay_thread()
         self.web_server.run_in_thread()
         sdl3.SDL_SetEventFilter(event_filter, None)  # type: ignore
 
         if self.window_listener:
             self.window_listener.process_current_window()
         self.refresh_autoload_mappings()
+        self.update_devices()
 
         try:
             self.input_poll()

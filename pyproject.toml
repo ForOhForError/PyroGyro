@@ -16,11 +16,14 @@ dependencies = [
     "psutil>=6.1.1,<7",
     "pydirectinput>=1.0.4,<2",
     "libevdev>=0.12 ; sys_platform == 'linux'",
+    "tomlkit>=0.13.3",
 ]
 
 [project.scripts]
 pyrogyro = "pyrogyro.pyrogyro:appmain"
 dist = "pyrogyro.project_util:build_windows_dist"
+download-sdl = "pyrogyro.project_util:download_sdl"
+build-front = "pyrogyro.project_util:build_and_copy_frontend"
 gen-configs = "pyrogyro.mapping:generate_default_mapping_files"
 
 [dependency-groups]

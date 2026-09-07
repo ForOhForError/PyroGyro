@@ -36,6 +36,7 @@ from pyrogyro.constants import (
 )
 from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
+from pyrogyro.config_blocks import Config
 from pyrogyro.platform_util import (
     init_window_listener,
     set_console_title,
@@ -227,6 +228,10 @@ class PyroGyroMapper:
                         self.logger.info(f" * {key.name}")
                 case com if "overlay".startswith(com.lower()):
                     self.toggle_overlay()
+                case com if "test_load".startswith(com):
+                    with(open("configs/goal.toml.future", "rb")) as handle:
+                        config = Config.load_from_file(handle)
+                        self.logger.info(f"Loaded test config: {config}")
 
     def console_input_loop(self):
         try:

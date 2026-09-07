@@ -15,6 +15,7 @@ from pyrogyro.math import *
 from pyrogyro.web import WebServer
 from pyrogyro.color_led import LerpableLED, ColorSpace
 
+from pyrogyro.config_blocks import ConfigBlock
 
 @dataclass
 class InputStore:
@@ -29,6 +30,50 @@ class InputStore:
     def clear(self):
         self._inputs.clear()
 
+
+class InputPad(ConfigBlock):
+    @classmethod
+    def is_source(cls) -> bool:
+        return True
+    
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        slots = []
+        for sdl_button_enum in SDLButtonSource:
+            slots.append(sdl_button_enum.name)
+        for sdl_axis_enum in SingleAxisSource:
+            slots.append(sdl_axis_enum.name)
+        for sdl_double_axis_enum in DoubleAxisSource:
+            slots.append(sdl_double_axis_enum.name)
+        slots.append("GYRO")
+        slots.append("TOUCHPAD_PRESS")
+        slots.append("PADS")
+        return slots
+    
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return ["RUMBLE"]
+    
+    @classmethod
+    def config_slots(cls) -> typing.List[str]:
+        return ["controller_name", "multi_pad_mode"]
+    
+    def pre_init(self, *args, **kwargs):
+        self.controller_name = ".*"
+        self.multi_pad_mode = "duplicate"
+
+ConfigBlock.register_block_class("PAD", InputPad)
+
+class XboxPad(ConfigBlock):
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return ["A", "B", "X", "Y", "DOWN", "LEFT", "RIGHT", "UP", "L1", "L2", "L3", "R1", "R2", "R3", "START", "BACK", "GUIDE"]
+    
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        return ["RUMBLE"]
+
+ConfigBlock.register_block_class("XBOX", XboxPad)
 
 class PyroGyroPad:
     def __init__(

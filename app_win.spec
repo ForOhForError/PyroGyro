@@ -32,7 +32,7 @@ a = Analysis(
     ['pyrogyro\\pyrogyro.py'],
     pathex=[Path(sdl3.__file__).parent.absolute()],
     binaries=[
-        (path_vigem_client, '.')
+        (path_vigem_client, '.'),
     ],
     datas=[
         ('res', 'res'),
@@ -41,7 +41,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['pyrogyro/win_runtime_hook.py'],
-    excludes=['pyrogyro/project_util.py'],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )

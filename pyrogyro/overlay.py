@@ -5,6 +5,8 @@ import math
 import sdl3
 import logging
 
+from pyrogyro.constants import resource_location
+
 """
 Overlay testing ground for future visible virtual menu stuff
 
@@ -30,8 +32,8 @@ class Overlay:
         screen_width = disp_mode.w
         screen_height = disp_mode.h
         self.window_ptr, self.renderer_ptr = (
-            sdl3.LP_SDL_Window(),
-            sdl3.LP_SDL_Renderer(),
+            sdl3.SDL_POINTER[sdl3.SDL_Window](),
+            sdl3.SDL_POINTER[sdl3.SDL_Renderer](),
         )
 
         success = sdl3.SDL_CreateWindowAndRenderer(
@@ -68,8 +70,8 @@ class Overlay:
 
     def display_loop(self):
         window, renderer = self.window_ptr.contents, self.renderer_ptr.contents
-        gHelloWorld = sdl3.SDL_LoadPNG(b"res/test.png")
-        font = sdl3.TTF_OpenFont(b"res/ttf/whitrabt.ttf", 20)
+        gHelloWorld = sdl3.SDL_LoadPNG(resource_location("test.png").encode())
+        font = sdl3.TTF_OpenFont(resource_location("ttf/whitrabt.ttf").encode(), 20)
         text_engine = sdl3.TTF_CreateSurfaceTextEngine()
         text = sdl3.TTF_CreateText(text_engine, font, "Overlay Test :3".encode(), 0)
         sdl3.TTF_SetTextColor(text, 255, 255, 255, 255)
@@ -96,8 +98,8 @@ class Overlay:
 
             mouse_x, mouse_y = ctypes.c_float(0), ctypes.c_float(0)
             mouse_x_pointer, mouse_y_pointer = (
-                sdl3.LP_c_float(mouse_x),
-                sdl3.LP_c_float(mouse_y),
+                sdl3.SDL_POINTER[ctypes.c_float](mouse_x),
+                sdl3.SDL_POINTER[ctypes.c_float](mouse_y),
             )
             sdl3.SDL_GetGlobalMouseState(mouse_x_pointer, mouse_y_pointer)
             pix_x, pix_y = int(mouse_x.value), int(mouse_y.value)

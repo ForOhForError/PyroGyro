@@ -21,6 +21,8 @@ def setup_pysdl_env_vars():
     os.environ["SDL_BINARY_PATH"] = SDL_BINARY_PATH
     os.environ["SDL_CHECK_BINARY_VERSION"] = "0"
     os.environ["SDL_FIND_BINARIES"] = "0"
+    os.environ["SDL_CHECK_VERSION"] = "0"
+    os.environ["SDL_DOC_GENERATOR"] = "0"
 
 
 def download_sdl_binary(

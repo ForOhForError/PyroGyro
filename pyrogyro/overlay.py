@@ -41,6 +41,7 @@ class Overlay:
             screen_width,
             screen_height,
             sdl3.SDL_WINDOW_BORDERLESS
+            | sdl3.SDL_WINDOW_UTILITY
             | sdl3.SDL_WINDOW_TRANSPARENT
             | sdl3.SDL_WINDOW_ALWAYS_ON_TOP
             | sdl3.SDL_WINDOW_NOT_FOCUSABLE
@@ -72,11 +73,16 @@ class Overlay:
         window, renderer = self.window_ptr.contents, self.renderer_ptr.contents
         gHelloWorld = sdl3.SDL_LoadPNG(resource_location("test.png").encode())
         font = sdl3.TTF_OpenFont(resource_location("ttf/whitrabt.ttf").encode(), 20)
-        text_engine = sdl3.TTF_CreateSurfaceTextEngine()
+        text_engine = sdl3.TTF_CreateRendererTextEngine(renderer)
         text = sdl3.TTF_CreateText(text_engine, font, "Overlay Test :3".encode(), 0)
         sdl3.TTF_SetTextColor(text, 255, 255, 255, 255)
         tex = sdl3.SDL_CreateTextureFromSurface(renderer, gHelloWorld)
-        screen_surface = sdl3.SDL_GetWindowSurface(window)
+
+        src_rect = sdl3.SDL_FRect(0,0,100,100)
+        dest_rec = sdl3.SDL_FRect(0,0,100,100)
+        
+        src_rect_ptr = sdl3.SDL_POINTER[sdl3.SDL_FRect](src_rect)
+        dest_rec_ptr = sdl3.SDL_POINTER[sdl3.SDL_FRect](dest_rec)
 
         center = 0, 0
         step = 0
@@ -86,15 +92,19 @@ class Overlay:
         while self.run:
             while sdl3.SDL_PollEvent(event):
                 pass
-            sdl3.SDL_ClearSurface(screen_surface, 0, 0, 0, 0)
+            sdl3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)
+            sdl3.SDL_RenderClear(renderer)
             rads = math.radians(step)
             x_pos = center[0] + rad * math.cos(rads)
             y_pos = center[1] + rad * math.sin(rads)
-            sdl3.SDL_BlitSurface(
-                gHelloWorld, None, screen_surface, sdl3.SDL_Rect(int(x_pos), int(y_pos))
+            
+            dest_rec.x = x_pos
+            dest_rec.y = y_pos
+            sdl3.SDL_RenderTexture(
+                renderer, tex, src_rect_ptr, dest_rec_ptr
             )
 
-            sdl3.TTF_DrawSurfaceText(text, int(x_pos), int(y_pos), screen_surface)
+            sdl3.TTF_DrawRendererText(text, x_pos, y_pos)
 
             mouse_x, mouse_y = ctypes.c_float(0), ctypes.c_float(0)
             mouse_x_pointer, mouse_y_pointer = (
@@ -114,12 +124,10 @@ class Overlay:
             sdl3.SDL_SetWindowSize(window, screen_rect.w, screen_rect.h)
             sdl3.SDL_SetWindowPosition(window, screen_rect.x, screen_rect.y)
 
-            sdl3.SDL_WriteSurfacePixel(
-                screen_surface, pix_x - screen_rect.x, pix_y - screen_rect.y, 0, 0, 0, 0
-            )
+            #pixel_mouse_x = ctypes.c_float(pix_x - screen_rect.x)
+            #pixel_mouse_y = ctypes.c_float(pix_y - screen_rect.y)
+            #sdl3.SDL_RenderPoint(renderer, pixel_mouse_x, pixel_mouse_y);
 
-            sdl3.SDL_SetWindowShape(window, screen_surface)
-
-            sdl3.SDL_UpdateWindowSurface(window)
+            sdl3.SDL_RenderPresent(renderer)
             step = (step + 1) % 360
             sdl3.SDL_Delay(10)

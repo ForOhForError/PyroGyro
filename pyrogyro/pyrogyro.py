@@ -232,6 +232,8 @@ class PyroGyroMapper:
                     with(open("configs/goal.toml.future", "rb")) as handle:
                         config = Config.load_from_file(handle)
                         self.logger.info(f"Loaded test config: {config}")
+                        config.resolve()
+                        self.logger.info(f"Resolution order: {config.get_value("xbox", "Y")}")
 
     def console_input_loop(self):
         try:

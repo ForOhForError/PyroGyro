@@ -30,7 +30,6 @@ class InputStore:
     def clear(self):
         self._inputs.clear()
 
-
 class InputPad(ConfigBlock):
     @classmethod
     def is_source(cls) -> bool:
@@ -50,6 +49,12 @@ class InputPad(ConfigBlock):
         slots.append("PADS")
         return slots
     
+    def get_output_value(self, slot):
+        if slot == "N":
+            return True
+        else:
+            return False
+    
     @classmethod
     def input_slots(cls) -> typing.List[str]:
         return ["RUMBLE"]
@@ -65,6 +70,7 @@ class InputPad(ConfigBlock):
 ConfigBlock.register_block_class("PAD", InputPad)
 
 class XboxPad(ConfigBlock):
+    vpad: vg.VX360Gamepad | None = None
     @classmethod
     def input_slots(cls) -> typing.List[str]:
         return ["A", "B", "X", "Y", "DOWN", "LEFT", "RIGHT", "UP", "L1", "L2", "L3", "R1", "R2", "R3", "START", "BACK", "GUIDE"]
@@ -73,7 +79,26 @@ class XboxPad(ConfigBlock):
     def output_slots(cls) -> typing.List[str]:
         return ["RUMBLE"]
 
+    def deavtivate(self):
+        if self.vpad:
+            self.vpad.unregister_notification()
+            self.vpad = None
+    
+    def activate(self):
+        self.vpad = vg.VX360Gamepad()
+
 ConfigBlock.register_block_class("XBOX", XboxPad)
+
+class Activator(ConfigBlock):
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return ["IN"]
+    
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        return ["OUT"]
+
+ConfigBlock.register_block_class("ACTIVATOR", Activator)
 
 class PyroGyroPad:
     def __init__(

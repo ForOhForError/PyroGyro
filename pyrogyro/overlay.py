@@ -6,19 +6,15 @@ import sdl3
 import logging
 
 from pyrogyro.constants import resource_location
+from pyrogyro.platform_util import set_window_passthrough
 
 """
-Overlay testing ground for future visible virtual menu stuff
-
-currently we have to do some juggling to set the window shape every time it changes, and there's no way to make
-rendered parts of the window be clickthrough with normal SDL calls. There's theoretically a solution for this in the works,
-but it's not presently merged and is only slated for eventual implementation.
+Overlay proof of concept. Uses windows-only platform specific code for enabling mouse passthrough, currently
+ported from the PR for adding this support natively
 
 See:
 https://github.com/libsdl-org/SDL/issues/12683
-
-For the moment this is solved by punching a single pixel out of the buffer at the mouse position. This objectively sucks, but seems
-to work mostly fine.
+https://github.com/libsdl-org/SDL/pull/14561
 """
 
 
@@ -32,6 +28,8 @@ class Overlay:
         screen_width = disp_mode.w
         screen_height = disp_mode.h
         self.window_ptr, self.renderer_ptr = (
+            # The LP_ type hints are generated from docs, which fail in the pyinstaller distibutable.
+            # Not too much of a pain to handle manually, for the moment.
             sdl3.SDL_POINTER[sdl3.SDL_Window](),
             sdl3.SDL_POINTER[sdl3.SDL_Renderer](),
         )
@@ -41,7 +39,6 @@ class Overlay:
             screen_width,
             screen_height,
             sdl3.SDL_WINDOW_BORDERLESS
-            | sdl3.SDL_WINDOW_UTILITY
             | sdl3.SDL_WINDOW_TRANSPARENT
             | sdl3.SDL_WINDOW_ALWAYS_ON_TOP
             | sdl3.SDL_WINDOW_NOT_FOCUSABLE
@@ -54,6 +51,7 @@ class Overlay:
             return
 
         window = self.window_ptr.contents
+        set_window_passthrough(window,True)
 
         sdl3.SDL_SetWindowRelativeMouseMode(window, True)
         sdl3.SDL_HideWindow(window)
@@ -90,8 +88,6 @@ class Overlay:
 
         event = sdl3.SDL_Event()
         while self.run:
-            while sdl3.SDL_PollEvent(event):
-                pass
             sdl3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)
             sdl3.SDL_RenderClear(renderer)
             rads = math.radians(step)
@@ -123,10 +119,6 @@ class Overlay:
 
             sdl3.SDL_SetWindowSize(window, screen_rect.w, screen_rect.h)
             sdl3.SDL_SetWindowPosition(window, screen_rect.x, screen_rect.y)
-
-            #pixel_mouse_x = ctypes.c_float(pix_x - screen_rect.x)
-            #pixel_mouse_y = ctypes.c_float(pix_y - screen_rect.y)
-            #sdl3.SDL_RenderPoint(renderer, pixel_mouse_x, pixel_mouse_y);
 
             sdl3.SDL_RenderPresent(renderer)
             step = (step + 1) % 360

@@ -2,6 +2,7 @@ import ctypes
 import platform
 
 import sdl3
+import logging
 
 from pyrogyro.math import *
 
@@ -20,6 +21,18 @@ match SYSTEM:
 
         kernel32 = ctypes.WinDLL("kernel32")
         user32 = ctypes.WinDLL("user32")
+        
+        GWL_EXSTYLE = -20
+        WS_EX_LAYERED = 0x00080000
+        WS_EX_TRANSPARENT = 0x00000020
+        WS_EX_TOPMOST = 0x00000008
+        WS_EX_COMPOSITED = 0x02000000
+        
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOACTIVATE = 0x0010
+        
+        LWA_ALPHA = 0x00000002
 
         def move_mouse(
             x: float,
@@ -51,6 +64,33 @@ match SYSTEM:
             speed = ctypes.c_int()
             user32.SystemParametersInfoA(get_mouse_speed, 0, ctypes.byref(speed), 0)
             return float(speed.value)
+        
+        def set_window_passthrough(window, passthrough=True):
+            """
+            Makes an SDL window passthrough with windows API calls.
+            
+            Just a straight port of https://github.com/libsdl-org/SDL/pull/14561/
+            """
+            win_props = sdl3.SDL_GetWindowProperties(window)
+            hwnd = ctypes.c_void_p()
+            hwnd = sdl3.SDL_GetPointerProperty(win_props, sdl3.SDL_PROP_WINDOW_WIN32_HWND_POINTER, hwnd)
+            logging.debug(f"Window hwnd: {hwnd}")
+            style = user32.GetWindowLongA(hwnd, GWL_EXSTYLE)
+            
+            if passthrough:
+                key = ctypes.c_int64(0)
+                alpha = ctypes.c_int64(0)
+                flags = ctypes.c_int64(0)
+                if (style & WS_EX_LAYERED):
+                    user32.GetLayeredWindowAttributesA(hwnd, ctypes.pointer(key), ctypes.pointer(alpha), ctypes.pointer(flags))
+                style |= (WS_EX_TRANSPARENT | WS_EX_LAYERED)
+                user32.SetWindowLongA(hwnd, GWL_EXSTYLE, style)
+                user32.SetLayeredWindowAttributes(hwnd, key, alpha, flags)
+            else:
+                style &= ~WS_EX_TRANSPARENT
+                if ((style & (WS_EX_LAYERED | LWA_ALPHA)) == WS_EX_LAYERED):
+                    style &= ~WS_EX_LAYERED
+                user32.SetWindowLong(hwnd, GWL_EXSTYLE, style)
 
     case _:
         import pyautogui
@@ -83,6 +123,9 @@ match SYSTEM:
             icon_location, tray_title, menu_options, on_quit=None, **kwargs
         ):
             return None
+
+        def set_window_passthrough(window, passthrough=True):
+            pass
 
         def init_window_listener(on_focus_change):
             return None

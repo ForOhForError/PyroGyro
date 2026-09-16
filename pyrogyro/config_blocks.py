@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel, Field
 import typing
 import logging
@@ -10,7 +12,7 @@ CONFIG_LOGGER = logging.getLogger("Config")
 
 class Config:
     def __init__(self, data):
-        self.blocks = {}
+        self.blocks:dict[str,ConfigBlock] = {}
         self.name = data.get("name", "PyroGyro Config")
         self.autoload = data.get("autoload", True)
         self.autoload_exe_name = data.get("autoload_exe_name", self.name)
@@ -34,14 +36,24 @@ class Config:
     def load_from_file(cls, file_handle):
         parsed_from_file = tomlkit.load(file_handle)
         return cls(parsed_from_file)
-    
+
+    def count_autoload_specificity(self):
+        if self.autoload:
+            return sum(
+                (
+                    1 if val != ".*" else 0
+                    for val in (
+                        self.autoload_exe_name,
+                        self.autoload_exe_name
+                    )
+                )
+            )
+        return 0
+
+    def get_blocks_by_type(self, type_check) -> list:
+        return [block for block in self.blocks.values() if issubclass(type_check,type(block))]
+
     def resolve(self):
-        # event_queue = [("pad", "N", True)]
-        # for event in event_queue:
-        #     block, slot, value = event
-        #     b = self.blocks.get(block)
-        #     if b:
-        #         b[slot] = value
         for block in self.get_resolution_order():
             for slot in block.output_slots():
                 if block[slot]:
@@ -50,14 +62,14 @@ class Config:
                         dest = self.blocks.get(dest_name)
                         if dest:
                             dest[dest_slot] = output_value
-    
+
     def get_resolution_order(self) -> list['ConfigBlock']:
         order = []
         visit = set()
         done = set()
         
         for block in self.blocks.values():
-            if block.is_source():
+            if block.is_source() and block.processable():
                 order.append(block)
                 visit.add(block)
         
@@ -152,6 +164,9 @@ class ConfigBlock:
     @classmethod
     def config_slots(cls) -> typing.List[str]:
         return []
+    
+    def processable(self) -> bool:
+        return True
 
     def __setitem__(self, key, val):
         if key in self._input_slots() or key in self._config_slots():

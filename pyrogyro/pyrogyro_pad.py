@@ -31,10 +31,109 @@ class InputStore:
         self._inputs.clear()
 
 class InputPad(ConfigBlock):
+    sdl_id:sdl3.SDL_JoystickID|None = None
+    sdl_pad:sdl3.SDL_POINTER[sdl3.SDL_Gamepad]|None = None
+    logger = logging.getLogger("InputPad")
     @classmethod
     def is_source(cls) -> bool:
         return True
+
+    def processable(self) -> bool:
+        return True if self.sdl_pad else False
     
+    def handle_event(self, sdl_event):
+        gyro_raw = Vec3()
+        accel = Vec3()
+        match sdl_event.type:
+            case sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN | sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
+                button_event = sdl_event.gbutton
+                timestamp = int(button_event.timestamp)
+                enum_val = SDLButtonSource(int(button_event.button))
+                button_name = enum_val.name
+                self.logger.info(
+                    f"{button_name} {'pressed' if button_event.down else 'released'}"
+                )
+                pyro_event = InputEvent(
+                    enum_val,
+                    EventType.PRESS if button_event.down else EventType.RELEASE,
+                    button_event.down,
+                    timestamp=timestamp,
+                )
+            case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
+                axis_event = sdl_event.gaxis
+                timestamp = int(axis_event.timestamp)
+                axis_id = axis_event.axis
+                enum_val = SingleAxisSource(axis_id)
+                pyro_event = InputEvent(
+                    enum_val,
+                    EventType.UPDATE,
+                    axis_event.value / 32768.0,
+                    timestamp=timestamp,
+                )
+            case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
+                sensor_event = sdl_event.gsensor
+                sensor_type = sensor_event.sensor
+                timestamp = sensor_event.sensor_timestamp
+                if sensor_type == sdl3.SDL_SENSOR_GYRO:
+                    self.gyro_update = True
+                    gyro_raw.set_value(*sensor_event.data)
+                    # SDL3 outputs gyro in radians per second
+                    gyro_raw *= RADIANS_TO_DEGREES
+                    if self.last_gyro_time == None:
+                        self.last_gyro_time = timestamp
+                    self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
+                    self.last_gyro_time = timestamp
+                elif sensor_type == sdl3.SDL_SENSOR_ACCEL:
+                    accel.set_value(*sensor_event.data)
+                # if self.gyro_calibrating:
+                #     self.gyro_calibration.update(gyro_raw)
+                #     self.gyro_update = False
+                # else:
+                #     self.gyro_vec += gyro_raw
+                #     self.accel_vec += accel
+            case evt_type if evt_type in (
+                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
+                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
+                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
+            ):
+                self.touchpad_update = True
+                touch_event = sdl_event.gtouchpad
+                pad_id = touch_event.touchpad
+                finger_id = touch_event.finger
+                key_tuple = (pad_id, finger_id)
+                # if sdl_event.type == sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
+                #     if key_tuple in self.touchpad_state:
+                #         self.touchpad_state.pop(key_tuple)
+                # else:
+                #     x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
+                #     self.touchpad_state[key_tuple] = Vec3(x, y, pressure)
+            case _:
+                self.logger.info("event type: " + str(evt_type))
+
+    def claim_pad(self, pad_id_list:list[sdl3.SDL_JoystickID]):
+        claimed = set()
+        if self.sdl_id in pad_id_list:
+            pad_id_list.remove(self.sdl_id)
+        else:
+            new_pad_id = None
+            for pad_id in pad_id_list:
+                pad_name_bytes = sdl3.SDL_GetGamepadNameForID(pad_id)
+                pad_name = (
+                    pad_name_bytes.decode() if pad_name_bytes else "[Name Unknown]"  # type: ignore
+                )
+                if re.fullmatch(self.controller_name, pad_name):
+                    if self.sdl_pad:
+                        sdl3.SDL_CloseGamepad(self.sdl_pad)
+                    self.sdl_id = pad_id
+                    self.sdl_pad = sdl3.SDL_OpenGamepad(pad_id)
+                    self.logger.info(f"Using Controller '{pad_name}'")
+                    claimed.add(pad_id)
+                    new_pad_id = pad_id
+                    break
+            if new_pad_id:
+                pad_id_list.remove(new_pad_id)
+        return self.sdl_id
+
     @classmethod
     def output_slots(cls) -> typing.List[str]:
         slots = []
@@ -118,7 +217,7 @@ class PyroGyroPad:
         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
         joystick = sdl3.SDL_GetGamepadJoystick(self.sdl_pad)
         self.sdl_joy = joystick
-        # self.sdl_haptic = sdl3.SDL_OpenHapticFromJoystick(joystick)
+        self.sdl_haptic = sdl3.SDL_OpenHapticFromJoystick(joystick)
         self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
         self.led = mapping.led
         self.gyro_calibrating = False
@@ -161,28 +260,28 @@ class PyroGyroPad:
         self.touchpad_state = {}
         self.touchpad_update = False
 
-    # def try_haptic(self):
-    #     if not self.sdl_haptic:
-    #         logging.debug("no haptic")
-    #         return
-    #     haptic_feat = sdl3.SDL_GetHapticFeatures(self.sdl_haptic)
-    #     if (int(haptic_feat) & sdl3.SDL_HAPTIC_SINE) == 0:
-    #         logging.debug("no haptic sine")
-    #         return
-    #     effect = sdl3.SDL_HapticEffect()
-    #     effect_pointer = sdl3.LP_SDL_HapticEffect(effect)
-    #     effect.type = sdl3.SDL_HAPTIC_SINE
-    #     effect.periodic.direction.type = sdl3.SDL_HAPTIC_POLAR
-    #     effect.periodic.direction.dir[0] = 18000
-    #     effect.periodic.period = 1000
-    #     effect.periodic.magnitude = 20000
-    #     effect.periodic.length = 5000
-    #     effect.periodic.attack_length = 1000
-    #     effect.periodic.fade_length = 1000
+    def try_haptic(self):
+        if not self.sdl_haptic:
+            logging.debug("no haptic")
+            return
+        haptic_feat = sdl3.SDL_GetHapticFeatures(self.sdl_haptic)
+        if (int(haptic_feat) & sdl3.SDL_HAPTIC_SINE) == 0:
+            logging.debug("no haptic sine")
+            return
+        effect = sdl3.SDL_HapticEffect()
+        effect_pointer = sdl3.LP_SDL_HapticEffect(effect)
+        effect.type = sdl3.SDL_HAPTIC_SINE
+        effect.periodic.direction.type = sdl3.SDL_HAPTIC_POLAR
+        effect.periodic.direction.dir[0] = 18000
+        effect.periodic.period = 1000
+        effect.periodic.magnitude = 20000
+        effect.periodic.length = 5000
+        effect.periodic.attack_length = 1000
+        effect.periodic.fade_length = 1000
 
-    #     effect_id = sdl3.SDL_CreateHapticEffect(self.sdl_haptic, effect_pointer)
-    #     sdl3.SDL_RunHapticEffect(self.sdl_haptic, effect_id, 1)
-    #     logging.debug("haptic done")
+        effect_id = sdl3.SDL_CreateHapticEffect(self.sdl_haptic, effect_pointer)
+        sdl3.SDL_RunHapticEffect(self.sdl_haptic, effect_id, 1)
+        logging.debug("haptic done")
 
     @property
     def poll_rate(self):

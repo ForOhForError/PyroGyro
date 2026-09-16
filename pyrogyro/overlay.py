@@ -17,6 +17,8 @@ https://github.com/libsdl-org/SDL/issues/12683
 https://github.com/libsdl-org/SDL/pull/14561
 """
 
+NS_PER_SECOND = 1000000000
+CIRCLE_SIZE = 30
 
 class Overlay:
     def __init__(self):
@@ -69,15 +71,17 @@ class Overlay:
 
     def display_loop(self):
         window, renderer = self.window_ptr.contents, self.renderer_ptr.contents
-        gHelloWorld = sdl3.SDL_LoadPNG(resource_location("test.png").encode())
+        gHelloWorld = sdl3.IMG_LoadTexture(renderer, resource_location("test.png").encode())
         font = sdl3.TTF_OpenFont(resource_location("ttf/whitrabt.ttf").encode(), 20)
+        font_emoji = sdl3.TTF_OpenFont(resource_location("ttf/notoemoji.ttf").encode(), 20)
+        sdl3.TTF_AddFallbackFont(font, font_emoji)
+        
         text_engine = sdl3.TTF_CreateRendererTextEngine(renderer)
-        text = sdl3.TTF_CreateText(text_engine, font, "Overlay Test :3".encode(), 0)
+        text = sdl3.TTF_CreateText(text_engine, font, "Video Games \N{VIDEO GAME}".encode(), 0)
         sdl3.TTF_SetTextColor(text, 255, 255, 255, 255)
-        tex = sdl3.SDL_CreateTextureFromSurface(renderer, gHelloWorld)
 
         src_rect = sdl3.SDL_FRect(0,0,100,100)
-        dest_rec = sdl3.SDL_FRect(0,0,100,100)
+        dest_rec = sdl3.SDL_FRect(0,0,CIRCLE_SIZE,CIRCLE_SIZE)
         
         src_rect_ptr = sdl3.SDL_POINTER[sdl3.SDL_FRect](src_rect)
         dest_rec_ptr = sdl3.SDL_POINTER[sdl3.SDL_FRect](dest_rec)
@@ -87,17 +91,24 @@ class Overlay:
         rad = 100
 
         event = sdl3.SDL_Event()
+        refresh_per_second_target = 60
+        ns_per_poll = int(NS_PER_SECOND/refresh_per_second_target)
+        start_time = time.time_ns()
         while self.run:
+            new_time = time.time_ns()
+            delta_time = new_time-start_time
+            start_time=new_time
             sdl3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)
             sdl3.SDL_RenderClear(renderer)
+            step += 60*delta_time/NS_PER_SECOND
+            step %= 360
             rads = math.radians(step)
-            x_pos = center[0] + rad * math.cos(rads)
-            y_pos = center[1] + rad * math.sin(rads)
-            
+            x_pos = center[0] - CIRCLE_SIZE / 2 + rad * math.cos(rads)
+            y_pos = center[1] - CIRCLE_SIZE / 2 + rad * math.sin(rads)
             dest_rec.x = x_pos
             dest_rec.y = y_pos
             sdl3.SDL_RenderTexture(
-                renderer, tex, src_rect_ptr, dest_rec_ptr
+                renderer, gHelloWorld, src_rect_ptr, dest_rec_ptr
             )
 
             sdl3.TTF_DrawRendererText(text, x_pos, y_pos)
@@ -121,5 +132,6 @@ class Overlay:
             sdl3.SDL_SetWindowPosition(window, screen_rect.x, screen_rect.y)
 
             sdl3.SDL_RenderPresent(renderer)
-            step = (step + 1) % 360
-            sdl3.SDL_Delay(10)
+            
+            poll_ns = time.time_ns() - start_time
+            sdl3.SDL_DelayNS(ns_per_poll - poll_ns)

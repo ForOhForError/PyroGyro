@@ -12,7 +12,7 @@ S = "xbox.A"
 E = "xbox.B"
 W = "xbox.X"
 BACK = "xbox.BACK"
-GYRO = "aim.GYRO"
+# GYRO = "aim.GYRO"
 
 [ xbox ]
 TYPE = "XBOX"

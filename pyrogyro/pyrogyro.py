@@ -34,7 +34,6 @@ from pyrogyro.constants import (
     VID_PID_IGNORE_LIST,
     resource_location,
 )
-from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
 from pyrogyro.config_blocks import Config
 from pyrogyro.platform_util import (
@@ -42,13 +41,15 @@ from pyrogyro.platform_util import (
     set_console_title,
     set_console_visibility,
 )
-from pyrogyro.pyrogyro_pad import PyroGyroPad
+from pyrogyro.pyrogyro_pad import PyroGyroPad, InputPad
 from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 import pyrogyro.overlay
 
 
-EVENT_TYPES_FILTER = set()
+EVENT_TYPES_FILTER = set(
+    range(sdl3.SDL_EVENT_WINDOW_SHOWN, sdl3.SDL_EVENT_WINDOW_HDR_STATE_CHANGED+1)
+)
 
 EVENT_TYPES_IGNORE = set(
     (
@@ -101,8 +102,9 @@ class PyroGyroMapper:
         self.web_server = WebServer()
         self.overlay = pyrogyro.overlay.Overlay()
         self.config_lock = threading.Lock()
-
-        self.pyropads = {}
+        
+        self.active_config: Config|None = None
+        self.pad_map: dict[sdl3.SDL_JoystickID,InputPad] = {}
         self.autoload_configs = {}
         self.sdl_joysticks = {}
 
@@ -116,46 +118,22 @@ class PyroGyroMapper:
             ):
                 with open(config_path, "rb") as config_handle:
                     try:
-                        mapping: Mapping = Mapping.load_from_file(
+                        config: Config = Config.load_from_file(
                             file_handle=config_handle
                         )
-                        if mapping.autoload != None:
+                        if config.autoload:
                             self.logger.debug(
                                 f"Pushed autoload mapping for file {config_path}"
                             )
                             self.autoload_configs[config_path] = (
-                                mapping,
+                                config,
                                 os.path.getmtime(config_path),
                             )
-                    except ValidationError as validation_error:
-                        self.logger.info(
-                            f"Error loading config {config_path}; skipping"
-                        )
-                        self.logger.debug(f"== VALIDATION ERRORS ==")
-                        err_count = 1
-                        for error in validation_error.errors():
-                            clean_location = ".".join(
-                                [
-                                    str(loc)
-                                    for loc in error.get("loc")
-                                    if not "enum[" in str(loc)
-                                ]
-                            )
-                            self.logger.debug(
-                                f"{err_count}: {error.get('msg')} FOR `{clean_location}` -> `{error.get('input')}`"
-                            )
-                            err_count += 1
-                        self.logger.debug(f"=====")
-                    except ScannerError as scanner_error:
-                        self.logger.info(
-                            f"Error parsing config {config_path}; skipping"
-                        )
-                        self.logger.debug(f"{scanner_error}")
-                    # except Exception as other_error:
-                    #    self.logger.info(
-                    #        f"Unknown error loading config {config_path}; skipping"
-                    #    )
-                    #    self.logger.debug(f"{type(other_error)}: {other_error}")
+                    except Exception as other_error:
+                       self.logger.info(
+                           f"Unknown error loading config {config_path}; skipping"
+                       )
+                       self.logger.debug(f"{type(other_error)}: {other_error}")
         to_remove = []
         for config_path in self.autoload_configs:
             if config_path not in config_path_list:
@@ -171,10 +149,40 @@ class PyroGyroMapper:
                 mapping_tuple[0] for mapping_tuple in self.autoload_configs.values()
             ]
             self.logger.debug(f"checking {len(configs_to_check)} config(s)")
-            for pyropad in self.pyropads.values():
-                pyropad.evaluate_autoload_mappings(
-                    configs_to_check, exe_name, window_title
-                )
+            potential_mappings = []
+            old_mapping = self.active_config
+            new_mapping = None
+            mapping:Config
+            for mapping in configs_to_check:
+                if all(
+                    (
+                        re.fullmatch(mapping.autoload_window_name, window_title),
+                        re.fullmatch(mapping.autoload_exe_name, exe_name),
+                    )
+                ):
+                    potential_mappings.append(mapping)
+            if potential_mappings:
+                if len(potential_mappings) == 1:
+                    new_mapping = potential_mappings[0]
+                else:
+                    potential_mappings.sort(key=Config.count_autoload_specificity)
+                    best_match = potential_mappings[-1]
+                    final_value = best_match.autoload.count_specificity()
+                    remaining_mappings = len(
+                        [
+                            mapping
+                            for mapping in potential_mappings
+                            if mapping.autoload.count_specificity() == final_value
+                        ]
+                    )
+                    if remaining_mappings == 1:
+                        new_mapping = best_match
+            if new_mapping is not old_mapping:
+                self.active_config = new_mapping
+                if self.active_config:
+                    self.logger.info(f"Switched to config {self.active_config.name}")
+                else:
+                    self.logger.info(f"Deactivated all configs.")
 
     def on_focus_change(self, exe_name, window_title):
         self.logger.debug(f"window changed to: {window_title} ({exe_name})")
@@ -205,13 +213,13 @@ class PyroGyroMapper:
 
     def start_calibration(self):
         self.logger.info("Starting gyro calibration on all devices")
-        for pyropad in self.pyropads.values():
-            pyropad.set_gyro_calibrating(True)
+        # for pyropad in self.pyropads.values():
+        #     pyropad.set_gyro_calibrating(True)
 
     def end_calibration(self):
         self.logger.info("Ending gyro calibration on all devices")
-        for pyropad in self.pyropads.values():
-            pyropad.set_gyro_calibrating(False)
+        # for pyropad in self.pyropads.values():
+        #     pyropad.set_gyro_calibrating(False)
 
     def handle_console_input(self, console_input: str):
         if console_input:
@@ -296,10 +304,10 @@ class PyroGyroMapper:
     def populate_joystick_list(self, ignore_virtual=True):
         self.logger.info("== Gamepads currently connected: ==")
         ignore_list = set(
-            (
-                (pypad.vpad.get_vid(), pypad.vpad.get_pid())
-                for pypad in self.pyropads.values()
-            )
+            # (
+            #     (pypad.vpad.get_vid(), pypad.vpad.get_pid())
+            #     for pypad in self.pyropads.values()
+            # )
         ).union(set(VID_PID_IGNORE_LIST))
         joystick_ids = sdl3.SDL_GetGamepads(None)  # type: ignore
 
@@ -331,23 +339,15 @@ class PyroGyroMapper:
         self.sdl_joysticks = joysticks
 
     def create_device_map(self):
-        for joy_uuid in self.sdl_joysticks:
-            if joy_uuid not in self.pyropads:
-                joystick_id = self.sdl_joysticks[joy_uuid]
-                self.logger.info(f"Registering pad for new device {joy_uuid}")
-                self.pyropads[joy_uuid] = PyroGyroPad(
-                    self.sdl_joysticks[joy_uuid],
-                    web_server=self.web_server,
-                    parent=self,
-                )
-        to_remove = []
-        for joy_uuid in self.pyropads:
-            if joy_uuid not in self.sdl_joysticks:
-                self.logger.info(f"Removing pad for removed device {joy_uuid}")
-                to_remove.append(joy_uuid)
-        for joy_uuid in to_remove:
-            pyropad = self.pyropads.pop(joy_uuid)
-            pyropad.cleanup()
+        pad_ids = list(self.sdl_joysticks.values())
+        self.pad_map.clear()
+        if self.active_config:
+            pad_blocks = self.active_config.get_blocks_by_type(InputPad)
+            pad_block: InputPad
+            for pad_block in pad_blocks:
+                pad_id = pad_block.claim_pad(pad_ids)
+                if pad_id:
+                    self.pad_map[pad_id] = pad_block
 
     def input_poll(self):
         while self.running:
@@ -355,21 +355,16 @@ class PyroGyroMapper:
             ns_per_poll = int(1000000000 / self.poll_rate)
             populate_pads = False
             event = sdl3.SDL_Event()
-            for pypad in self.pyropads.values():
-                pypad.on_poll_start()
+            # for pypad in self.pyropads.values():
+            #     pypad.on_poll_start()
             while sdl3.SDL_PollEvent(event):  # type: ignore
                 match event.type:  # type: ignore
                     case evt_type if evt_type in EVENT_TYPES_PASS_TO_PAD:
                         gamepad_event = event.gdevice  # type: ignore
-                        joystick_uuid_bytes = sdl3.SDL_GetGamepadGUIDForID(
-                            gamepad_event.which
-                        ).data[  # type: ignore
-                            0:16
-                        ]
-                        joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
-                        pypad = self.pyropads.get(joystick_uuid)
-                        if pypad:
-                            pypad.handle_event(event)
+                        pad_id = gamepad_event.which
+                        pad_block = self.pad_map.get(pad_id)
+                        if pad_block:
+                            pad_block.handle_event(event)
                     case sdl3.SDL_EVENT_GAMEPAD_ADDED | sdl3.SDL_EVENT_GAMEPAD_REMOVED:
                         populate_pads = True
                     case evt_type if evt_type in EVENT_TYPES_IGNORE:
@@ -384,8 +379,8 @@ class PyroGyroMapper:
                 self.update_devices()
             if self.systray:
                 self.systray.update()
-            for pypad in self.pyropads.values():
-                pypad.update(time.time())
+            # for pypad in self.pyropads.values():
+            #     pypad.update(time.time())
             poll_ns = time.time_ns() - start_time
             sdl3.SDL_DelayNS(ns_per_poll - poll_ns)  # type: ignore
 

@@ -62,7 +62,10 @@ class Config:
         return [block for block in self.blocks.values() if issubclass(type_check,type(block))]
 
     def process(self):
+        sources = set()
         for block in self.get_resolution_order():
+            if block.is_source():
+                sources.add(block)
             block.process()
             for slot in block.output_slots():
                 if block[slot]:
@@ -71,6 +74,8 @@ class Config:
                         dest = self.blocks.get(dest_name)
                         if dest:
                             dest[dest_slot] = output_value
+        for block in sources:
+            block.process_source_end()
 
     def get_resolution_order(self) -> list['ConfigBlock']:
         order = []
@@ -132,6 +137,9 @@ class ConfigBlock:
             self._output_vals[slot] = value
         else:
             raise KeyError(f"No output slot {slot}")
+
+    def process_source_end(self):
+        pass
 
     def on_load(self):
         pass

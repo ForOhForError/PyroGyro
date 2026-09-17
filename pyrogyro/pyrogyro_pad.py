@@ -42,6 +42,17 @@ class InputPad(ConfigBlock):
     def processable(self) -> bool:
         return True if self.sdl_pad else False
     
+    def process_source_end(self):
+        if self.sdl_pad:
+            for slot in self.input_slots():
+                value = self[slot]
+                match slot:
+                    case "RUMBLE":
+                        if isinstance(value, Vec2):
+                            sdl3.SDL_RumbleGamepad(
+                                self.sdl_pad, value.x, value.y, 1000
+                            )
+    
     def handle_event(self, sdl_event):
         gyro_raw = Vec3()
         accel = Vec3()
@@ -223,6 +234,29 @@ class XboxPad(ConfigBlock):
     
     def on_load(self):
         self.vpad = vg.VX360Gamepad()
+        self.vpad.register_notification(callback_function=self.virtual_pad_callback)
+    
+    def virtual_pad_callback(
+        self, client, target, large_motor, small_motor, led_number, user_data
+    ):
+        """
+        Callback function triggered at each received state change
+
+        :param client: vigem bus ID
+        :param target: vigem device ID
+        :param large_motor: integer in [0, 255] representing the state of the large motor
+        :param small_motor: integer in [0, 255] representing the state of the small motor
+        :param led_number: integer in [0, 255] representing the state of the LED ring
+        :param user_data: placeholder, do not use
+        """
+        low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
+        high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
+        
+        vec = self@"RUMBLE"
+        if not isinstance(vec,Vec2):
+            vec = Vec2()
+        vec.x, vec.y = low_frequency_rumble, high_frequency_rumble
+        self.set_output_val("RUMBLE", Vec2(low_frequency_rumble, high_frequency_rumble))
 
 ConfigBlock.register_block_class("XBOX", XboxPad)
 

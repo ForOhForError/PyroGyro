@@ -34,6 +34,7 @@ class InputPad(ConfigBlock):
     sdl_id:sdl3.SDL_JoystickID|None = None
     sdl_pad:sdl3.SDL_POINTER[sdl3.SDL_Gamepad]|None = None
     logger = logging.getLogger("InputPad")
+    
     @classmethod
     def is_source(cls) -> bool:
         return True
@@ -50,26 +51,28 @@ class InputPad(ConfigBlock):
                 timestamp = int(button_event.timestamp)
                 enum_val = SDLButtonSource(int(button_event.button))
                 button_name = enum_val.name
+                self.set_output_val(button_name, bool(button_event.down))
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
-                pyro_event = InputEvent(
-                    enum_val,
-                    EventType.PRESS if button_event.down else EventType.RELEASE,
-                    button_event.down,
-                    timestamp=timestamp,
-                )
+                # pyro_event = InputEvent(
+                #     enum_val,
+                #     EventType.PRESS if button_event.down else EventType.RELEASE,
+                #     button_event.down,
+                #     timestamp=timestamp,
+                # )
             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
                 timestamp = int(axis_event.timestamp)
                 axis_id = axis_event.axis
-                enum_val = SingleAxisSource(axis_id)
-                pyro_event = InputEvent(
-                    enum_val,
-                    EventType.UPDATE,
-                    axis_event.value / 32768.0,
-                    timestamp=timestamp,
-                )
+                axis = SingleAxisSource(axis_id)
+                double_axis = DoubleAxisSource.from_single(axis)
+                if double_axis:
+                    val = self@double_axis.name
+                    val = axis.write_vec(val,axis_event.value / 32768.0)
+                    self.set_output_val(double_axis.name,val)
+                else:
+                    self.set_output_val(axis.name,axis_event.value / 32768.0)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
                 sensor_type = sensor_event.sensor
@@ -148,12 +151,6 @@ class InputPad(ConfigBlock):
         slots.append("PADS")
         return slots
     
-    def get_output_value(self, slot):
-        if slot == "N":
-            return True
-        else:
-            return False
-    
     @classmethod
     def input_slots(cls) -> typing.List[str]:
         return ["RUMBLE"]
@@ -168,22 +165,63 @@ class InputPad(ConfigBlock):
 
 ConfigBlock.register_block_class("PAD", InputPad)
 
+XBOX_BUTTON_MAP = {
+    "A":vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
+    "B":vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
+    "X":vg.XUSB_BUTTON.XUSB_GAMEPAD_X,
+    "Y":vg.XUSB_BUTTON.XUSB_GAMEPAD_Y,
+    "DOWN":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
+    "LEFT":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
+    "RIGHT":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
+    "UP":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
+    "L1":vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER,
+    "L3":vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB,
+    "R1":vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER,
+    "R3":vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB,
+    "START":vg.XUSB_BUTTON.XUSB_GAMEPAD_START,
+    "BACK":vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK,
+    "GUIDE":vg.XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
+}
+
 class XboxPad(ConfigBlock):
     vpad: vg.VX360Gamepad | None = None
     @classmethod
     def input_slots(cls) -> typing.List[str]:
-        return ["A", "B", "X", "Y", "DOWN", "LEFT", "RIGHT", "UP", "L1", "L2", "L3", "R1", "R2", "R3", "START", "BACK", "GUIDE"]
+        return ["A", "B", "X", "Y", "DOWN", "LEFT", "RIGHT", "UP", "LSTICK", "RSTICK", "L1", "L2", "L3", "R1", "R2", "R3", "START", "BACK", "GUIDE"]
     
     @classmethod
     def output_slots(cls) -> typing.List[str]:
         return ["RUMBLE"]
-
-    def deavtivate(self):
-        if self.vpad:
-            self.vpad.unregister_notification()
-            self.vpad = None
     
-    def activate(self):
+    def process(self):
+        if self.vpad:
+            for slot in self.input_slots():
+                value = self[slot]
+                match slot:
+                    case "L2":
+                        if value != None:
+                            self.vpad.left_trigger_float(value)
+                    case "R2":
+                        if value != None:
+                            self.vpad.right_trigger_float(value)
+                    case "LSTICK":
+                        if value != None:
+                            self.vpad.left_joystick_float(value.x,-value.y)
+                    case "RSTICK":
+                        if value != None:
+                            self.vpad.right_joystick_float(value.x,-value.y)
+                    case _:
+                        if value:
+                            self.vpad.press_button(XBOX_BUTTON_MAP[slot])
+                        else:
+                            self.vpad.release_button(XBOX_BUTTON_MAP[slot])
+            self.vpad.update()
+
+    def on_unload(self):
+        self.vpad.unregister_notification()
+        self.vpad = None
+    
+    def on_load(self):
         self.vpad = vg.VX360Gamepad()
 
 ConfigBlock.register_block_class("XBOX", XboxPad)

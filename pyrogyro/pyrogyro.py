@@ -237,11 +237,7 @@ class PyroGyroMapper:
                 case com if "overlay".startswith(com.lower()):
                     self.toggle_overlay()
                 case com if "test_load".startswith(com):
-                    with(open("configs/goal.toml.future", "rb")) as handle:
-                        config = Config.load_from_file(handle)
-                        self.logger.info(f"Loaded test config: {config}")
-                        config.resolve()
-                        self.logger.info(f"Resolution order: {config.get_value("xbox", "Y")}")
+                    pass
 
     def console_input_loop(self):
         try:
@@ -348,6 +344,7 @@ class PyroGyroMapper:
                 pad_id = pad_block.claim_pad(pad_ids)
                 if pad_id:
                     self.pad_map[pad_id] = pad_block
+            self.active_config.do_load_unload()
 
     def input_poll(self):
         while self.running:
@@ -379,6 +376,8 @@ class PyroGyroMapper:
                 self.update_devices()
             if self.systray:
                 self.systray.update()
+            if self.active_config:
+                self.active_config.process()
             # for pypad in self.pyropads.values():
             #     pypad.update(time.time())
             poll_ns = time.time_ns() - start_time

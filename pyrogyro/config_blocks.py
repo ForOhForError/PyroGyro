@@ -50,11 +50,20 @@ class Config:
             )
         return 0
 
+    def do_load_unload(self):
+        active = self.get_resolution_order()
+        for block in self.get_resolution_order():
+            block.load()
+        for block in self.blocks.values():
+            if block not in active:
+                block.unload()
+
     def get_blocks_by_type(self, type_check) -> list:
         return [block for block in self.blocks.values() if issubclass(type_check,type(block))]
 
-    def resolve(self):
+    def process(self):
         for block in self.get_resolution_order():
+            block.process()
             for slot in block.output_slots():
                 if block[slot]:
                     output_value = block@slot
@@ -77,11 +86,8 @@ class Config:
             next = visit.pop()
             for slot in next.output_slots():
                 for block_name, slot_name in next.get_destinations(slot):
-                    logging.info(f"{slot}->{block_name}.{slot_name}")
                     block = self.blocks.get(block_name)
-                    logging.info(f"checking {block}")
                     if block and (block not in done) and (block not in visit):
-                        logging.info(f"visiting {block_name}")
                         visit.add(block)
                         order.append(block)
             done.add(next)
@@ -90,6 +96,9 @@ class Config:
 class ConfigBlock:
     class Register:
         BLOCK_TYPES: typing.Dict[str, type] = {}
+
+    _loaded = False
+    _output_vals:dict[str,typing.Any] = {}
 
     @classmethod
     def register_block_class(cls, block_type: str, type_obj: typing.Type):
@@ -109,14 +118,36 @@ class ConfigBlock:
             raise ValueError(f"'{block_type}' is not a valid type")
         return block_class(data)
 
+    def process(self):
+        pass
+
     def __matmul__(self, slot):
         if slot in self.output_slots():
-            return self.get_output_value(slot)
+            return self._output_vals.get(slot, 0.0)
+        else:
+            raise KeyError(f"No output slot {slot}")
+    
+    def set_output_val(self, slot, value):
+        if slot in self.output_slots():
+            self._output_vals[slot] = value
         else:
             raise KeyError(f"No output slot {slot}")
 
-    def get_output_value(self, slot) -> typing.Any:
-        return None
+    def on_load(self):
+        pass
+    
+    def on_unload(self):
+        pass
+
+    def load(self):
+        if not self._loaded:
+            self.on_load()
+            self._loaded = True
+    
+    def unload(self):
+        if self._loaded:
+            self.on_unload()
+            self._loaded = False
 
     def get_destinations(self, slot) -> typing.List[typing.Tuple[str,str]]:
         if slot in self._output_slots():

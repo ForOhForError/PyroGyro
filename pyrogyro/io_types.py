@@ -188,12 +188,31 @@ class SingleAxisSource(enum.Enum):
     RSTICK_Y = sdl3.SDL_GAMEPAD_AXIS_RIGHTY
     L2 = sdl3.SDL_GAMEPAD_AXIS_LEFT_TRIGGER
     R2 = sdl3.SDL_GAMEPAD_AXIS_RIGHT_TRIGGER
+    
+    def write_vec(self, vec, value):
+        if not isinstance(vec, Vec2):
+            vec = Vec2()
+        match self:
+            case SingleAxisSource.LSTICK_X | SingleAxisSource.RSTICK_X:
+                vec.x = value
+            case SingleAxisSource.LSTICK_Y | SingleAxisSource.RSTICK_Y:
+                vec.y = value
+        return vec
 
 
 class DoubleAxisSource(enum.Enum):
     LSTICK = (SingleAxisSource.LSTICK_X, SingleAxisSource.LSTICK_Y)
     RSTICK = (SingleAxisSource.RSTICK_X, SingleAxisSource.RSTICK_Y)
 
+    @classmethod
+    def from_single(cls, axis:SingleAxisSource):
+        match axis:
+            case SingleAxisSource.LSTICK_X | SingleAxisSource.LSTICK_Y:
+                return cls.LSTICK
+            case SingleAxisSource.RSTICK_X | SingleAxisSource.RSTICK_Y:
+                return cls.RSTICK
+        return None
+    
     def get_other_axis(self, axis_enum):
         if axis_enum == self.value[0]:
             return self.value[1]

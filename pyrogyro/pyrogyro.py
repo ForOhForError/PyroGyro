@@ -1,7 +1,3 @@
-import colorsys
-import ctypes
-import dataclasses
-import enum
 import importlib.metadata
 import logging
 import os
@@ -10,7 +6,6 @@ import re
 import sys
 import threading
 import time
-import typing
 import uuid
 from pathlib import Path
 
@@ -19,9 +14,6 @@ from pyrogyro.project_util import setup_pysdl_env_vars
 setup_pysdl_env_vars()
 
 import sdl3
-import vgamepad as vg
-from pydantic import ValidationError
-from ruamel.yaml.scanner import ScannerError
 
 import pyrogyro.io_types
 from pyrogyro.constants import (
@@ -41,14 +33,15 @@ from pyrogyro.platform_util import (
     set_console_title,
     set_console_visibility,
 )
-from pyrogyro.pyrogyro_pad import PyroGyroPad, InputPad
+import pyrogyro.kbm_blocks
+from pyrogyro.pyrogyro_pad import InputPad
 from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 import pyrogyro.overlay
 
 
 EVENT_TYPES_FILTER = set(
-    range(sdl3.SDL_EVENT_WINDOW_SHOWN, sdl3.SDL_EVENT_WINDOW_HDR_STATE_CHANGED+1)
+    range(sdl3.SDL_EVENT_WINDOW_SHOWN, sdl3.SDL_EVENT_WINDOW_HDR_STATE_CHANGED + 1)
 )
 
 EVENT_TYPES_IGNORE = set(
@@ -90,6 +83,8 @@ def event_filter(userdata, event):
 
 
 class PyroGyroMapper:
+    _singleton_instance: "PyroGyroMapper|None" = None
+
     def __init__(self, poll_rate=DEFAULT_POLL_RATE):
         self.logger = logging.getLogger("PyroGyroMapper")
         self.visible = True
@@ -102,11 +97,20 @@ class PyroGyroMapper:
         self.web_server = WebServer()
         self.overlay = pyrogyro.overlay.Overlay()
         self.config_lock = threading.Lock()
-        
-        self.active_config: Config|None = None
-        self.pad_map: dict[sdl3.SDL_JoystickID,InputPad] = {}
+
+        self.active_config: Config | None = None
+        self.pad_map: dict[sdl3.SDL_JoystickID, InputPad] = {}
         self.autoload_configs = {}
         self.sdl_joysticks = {}
+
+    def get_poll_rate(self):
+        return self.poll_rate
+
+    @classmethod
+    def instance(cls) -> "PyroGyroMapper":
+        if cls._singleton_instance == None:
+            cls._singleton_instance = cls()
+        return cls._singleton_instance
 
     def refresh_autoload_mappings(self):
         config_path_list = set(Path("configs").rglob("*.toml"))
@@ -130,10 +134,10 @@ class PyroGyroMapper:
                                 os.path.getmtime(config_path),
                             )
                     except Exception as other_error:
-                       self.logger.info(
-                           f"Unknown error loading config {config_path}; skipping"
-                       )
-                       self.logger.debug(f"{type(other_error)}: {other_error}")
+                        self.logger.info(
+                            f"Unknown error loading config {config_path}; skipping"
+                        )
+                        self.logger.debug(f"{type(other_error)}: {other_error}")
         to_remove = []
         for config_path in self.autoload_configs:
             if config_path not in config_path_list:
@@ -152,7 +156,7 @@ class PyroGyroMapper:
             potential_mappings = []
             old_mapping = self.active_config
             new_mapping = None
-            mapping:Config
+            mapping: Config
             for mapping in configs_to_check:
                 if all(
                     (
@@ -213,13 +217,13 @@ class PyroGyroMapper:
 
     def start_calibration(self):
         self.logger.info("Starting gyro calibration on all devices")
-        # for pyropad in self.pyropads.values():
-        #     pyropad.set_gyro_calibrating(True)
+        for pad in self.pad_map.values():
+            pad.set_gyro_calibrating(True)
 
     def end_calibration(self):
         self.logger.info("Ending gyro calibration on all devices")
-        # for pyropad in self.pyropads.values():
-        #     pyropad.set_gyro_calibrating(False)
+        for pad in self.pad_map.values():
+            pad.set_gyro_calibrating(False)
 
     def handle_console_input(self, console_input: str):
         if console_input:
@@ -420,7 +424,7 @@ def appmain(*args, **kwargs):
         level=LOG_LEVEL, format=LOG_FORMAT_DEBUG if DEBUG else LOG_FORMAT
     )
     PyroGyroMapper.init_sdl()
-    PyroGyroMapper().run()
+    PyroGyroMapper.instance().run()
 
 
 if __name__ == "__main__":

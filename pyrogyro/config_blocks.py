@@ -1,4 +1,7 @@
+from dataclasses import dataclass
+import enum
 import re
+import time
 
 from pydantic import BaseModel, Field
 import typing
@@ -10,9 +13,10 @@ from functools import cache
 
 CONFIG_LOGGER = logging.getLogger("Config")
 
+
 class Config:
     def __init__(self, data):
-        self.blocks:dict[str,ConfigBlock] = {}
+        self.blocks: dict[str, ConfigBlock] = {}
         self.name = data.get("name", "PyroGyro Config")
         self.autoload = data.get("autoload", True)
         self.autoload_exe_name = data.get("autoload_exe_name", self.name)
@@ -42,10 +46,7 @@ class Config:
             return sum(
                 (
                     1 if val != ".*" else 0
-                    for val in (
-                        self.autoload_exe_name,
-                        self.autoload_exe_name
-                    )
+                    for val in (self.autoload_exe_name, self.autoload_exe_name)
                 )
             )
         return 0
@@ -59,34 +60,39 @@ class Config:
                 block.unload()
 
     def get_blocks_by_type(self, type_check) -> list:
-        return [block for block in self.blocks.values() if issubclass(type_check,type(block))]
+        return [
+            block
+            for block in self.blocks.values()
+            if issubclass(type_check, type(block))
+        ]
 
     def process(self):
+        time_now = time.time()
         sources = set()
         for block in self.get_resolution_order():
             if block.is_source():
                 sources.add(block)
-            block.process()
+            block.process(time_now=time_now)
             for slot in block.output_slots():
                 if block[slot]:
-                    output_value = block@slot
+                    output_value = block @ slot
                     for dest_name, dest_slot in block.get_destinations(slot):
                         dest = self.blocks.get(dest_name)
                         if dest:
                             dest[dest_slot] = output_value
         for block in sources:
-            block.process_source_end()
+            block.process_source_end(time_now=time_now)
 
-    def get_resolution_order(self) -> list['ConfigBlock']:
+    def get_resolution_order(self) -> list["ConfigBlock"]:
         order = []
         visit = set()
         done = set()
-        
+
         for block in self.blocks.values():
             if block.is_source() and block.processable():
                 order.append(block)
                 visit.add(block)
-        
+
         while len(visit) > 0:
             next = visit.pop()
             for slot in next.output_slots():
@@ -98,12 +104,26 @@ class Config:
             done.add(next)
         return order
 
+
+class InputState(enum.Enum):
+    UPDATE = 0
+    PRESSED = 1
+    RELEASED = 0
+
+
+@dataclass
+class InputValue:
+    value: typing.Any
+    state: InputState = InputState.UPDATE
+
+
 class ConfigBlock:
     class Register:
         BLOCK_TYPES: typing.Dict[str, type] = {}
 
     _loaded = False
-    _output_vals:dict[str,typing.Any] = {}
+    _output_vals: dict[str, typing.Any] = {}
+    _input_vals: dict[str, InputValue] = {}
 
     @classmethod
     def register_block_class(cls, block_type: str, type_obj: typing.Type):
@@ -112,7 +132,7 @@ class ConfigBlock:
     @classmethod
     def get_block_class(cls, block_type):
         return cls.Register.BLOCK_TYPES.get(block_type)
-    
+
     @classmethod
     def parse_from_dict(cls, data: typing.Dict[str, typing.Any]):
         block_type = data.get("TYPE", None)
@@ -123,7 +143,16 @@ class ConfigBlock:
             raise ValueError(f"'{block_type}' is not a valid type")
         return block_class(data)
 
-    def process(self):
+    def on_press(self, slot: str, slot_input: InputValue):
+        pass
+
+    def on_release(self, slot: str, slot_input: InputValue):
+        pass
+
+    def on_update(self, slot: str, slot_input: InputValue):
+        pass
+
+    def process(self, time_now: float = 0):
         pass
 
     def __matmul__(self, slot):
@@ -131,19 +160,19 @@ class ConfigBlock:
             return self._output_vals.get(slot, 0.0)
         else:
             raise KeyError(f"No output slot {slot}")
-    
+
     def set_output_val(self, slot, value):
         if slot in self.output_slots():
             self._output_vals[slot] = value
         else:
             raise KeyError(f"No output slot {slot}")
 
-    def process_source_end(self):
+    def process_source_end(self, time_now: float = 0):
         pass
 
     def on_load(self):
         pass
-    
+
     def on_unload(self):
         pass
 
@@ -151,13 +180,13 @@ class ConfigBlock:
         if not self._loaded:
             self.on_load()
             self._loaded = True
-    
+
     def unload(self):
         if self._loaded:
             self.on_unload()
             self._loaded = False
 
-    def get_destinations(self, slot) -> typing.List[typing.Tuple[str,str]]:
+    def get_destinations(self, slot) -> typing.List[typing.Tuple[str, str]]:
         if slot in self._output_slots():
             dest = self[slot]
             if not dest:
@@ -181,42 +210,57 @@ class ConfigBlock:
     @cache
     def _input_slots(cls) -> typing.List[str]:
         return cls.input_slots()
-    
+
     @classmethod
     def input_slots(cls) -> typing.List[str]:
         return []
-    
+
     @classmethod
     @cache
     def _output_slots(cls) -> typing.List[str]:
         return cls.output_slots()
-    
+
     @classmethod
     def output_slots(cls) -> typing.List[str]:
         return []
-    
+
     @classmethod
     @cache
     def _config_slots(cls) -> typing.List[str]:
         return cls.config_slots()
-    
+
     @classmethod
     def config_slots(cls) -> typing.List[str]:
         return []
-    
+
     def processable(self) -> bool:
         return True
 
     def __setitem__(self, key, val):
-        if key in self._input_slots() or key in self._config_slots():
-            setattr(self, key, val)
-        elif key in self._output_slots():
+        if key in self._input_slots():
+            val_obj = self._input_vals.get(key, InputValue(False))
+            self._input_vals[key] = val_obj
+            old_bool, new_bool = bool(val_obj.value), bool(val)
+            val_obj.value = val
+            if old_bool != new_bool:
+                if old_bool:
+                    val_obj.state = InputState.RELEASED
+                    self.on_release(key, val_obj)
+                else:
+                    val_obj.state = InputState.PRESSED
+                    self.on_press(key, val_obj)
+            else:
+                val_obj.state = InputState.UPDATE
+                self.on_update(key, val_obj)
+        elif key in self._output_slots() or key in self._config_slots():
             setattr(self, key, val)
         else:
             raise KeyError(f"{type(self).__name__} has no assignable slot {key}")
 
     def __getitem__(self, key):
-        if key in self._input_slots() or key in self._config_slots() or key in self._output_slots():
+        if key in self._input_slots():
+            return self._input_vals.get(key, InputValue(False))
+        elif key in self._config_slots() or key in self._output_slots():
             if hasattr(self, key):
                 return getattr(self, key)
             else:
@@ -226,16 +270,16 @@ class ConfigBlock:
 
     def pre_init(self, *args, **kwargs):
         pass
-    
+
     def post_init(self, *args, **kwargs):
         pass
-    
+
     def activate(self):
         pass
-    
+
     def deactivate(self):
         pass
-    
+
     def __del__(self):
         self.deactivate()
 
@@ -257,3 +301,33 @@ class ConfigBlock:
             else:
                 CONFIG_LOGGER.error(f"{type(self).__name__} has no slot {key}")
         self.post_init(*args, **kwargs)
+
+
+# Some basic operator blocks
+
+
+class Multiplier(ConfigBlock):
+    factor = 1
+
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return ["IN"]
+
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        return ["OUT"]
+
+    @classmethod
+    def config_slots(cls) -> typing.List[str]:
+        return ["factor"]
+
+    def process(self, time_now: float = 0):
+        try:
+            val = self.IN
+            val = val * self.factor
+            self.set_output_val("OUT", val)
+        except Exception:
+            pass
+
+
+ConfigBlock.register_block_class("MULT", Multiplier)

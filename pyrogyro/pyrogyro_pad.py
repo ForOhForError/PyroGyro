@@ -1,8 +1,6 @@
 import logging
 import re
 import typing
-import uuid
-from dataclasses import dataclass, field
 
 import sdl3
 import vgamepad as vg
@@ -10,49 +8,94 @@ import vgamepad as vg
 from pyrogyro.constants import DEFAULT_POLL_RATE
 from pyrogyro.gamepad_motion import GyroCalibration, sensor_fusion_gravity
 from pyrogyro.io_types import *
-from pyrogyro.mapping import Mapping
 from pyrogyro.math import *
-from pyrogyro.web import WebServer
-from pyrogyro.color_led import LerpableLED, ColorSpace
 
 from pyrogyro.config_blocks import ConfigBlock
 
-@dataclass
-class InputStore:
-    _inputs: typing.List[InputEvent] = field(default_factory=list)
-
-    def put_input(self, input_event: InputEvent):
-        self._inputs.append(input_event)
-
-    def get_inputs(self):
-        return self._inputs
-
-    def clear(self):
-        self._inputs.clear()
 
 class InputPad(ConfigBlock):
-    sdl_id:sdl3.SDL_JoystickID|None = None
-    sdl_pad:sdl3.SDL_POINTER[sdl3.SDL_Gamepad]|None = None
+    sdl_id: sdl3.SDL_JoystickID | None = None
+    sdl_pad: sdl3.SDL_POINTER[sdl3.SDL_Gamepad] | None = None
     logger = logging.getLogger("InputPad")
-    
+
+    gyro_calibrating = False
+    gyro_calibration = GyroCalibration()
+    last_timestamp = None
+    last_gyro_time = None
+    gravity = Vec3()
+    gyro_vec = Vec3()
+    accel_vec = Vec3()
+    delta_time = 0.0
+    gyro_update = False
+
+    def __del__(self):
+        if self.sdl_pad:
+            sdl3.SDL_CloseGamepad(self.sdl_pad)
+
     @classmethod
     def is_source(cls) -> bool:
         return True
 
     def processable(self) -> bool:
         return True if self.sdl_pad else False
-    
-    def process_source_end(self):
+
+    def init_gyro(self):
+        gyro_sensors = (
+            sdl3.SDL_SENSOR_GYRO,
+            sdl3.SDL_SENSOR_GYRO_L,
+            sdl3.SDL_SENSOR_GYRO_R,
+        )
+        accel_sensors = (
+            sdl3.SDL_SENSOR_ACCEL,
+            sdl3.SDL_SENSOR_ACCEL_L,
+            sdl3.SDL_SENSOR_ACCEL_R,
+        )
+        if self.sdl_pad:
+            for gyro_sensor in gyro_sensors:
+                if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor):
+                    self.logger.info("Gyro Sensor Detected")
+                    sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, gyro_sensor, True)
+            for accel_sensor in accel_sensors:
+                if sdl3.SDL_GamepadHasSensor(self.sdl_pad, accel_sensor):
+                    self.logger.info("Accel Sensor Detected")
+                    sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True)
+
+    def process(self, time_now: float = 0):
+        if self.gyro_update:
+            delta_max = 5 / DEFAULT_POLL_RATE
+            if not self.last_timestamp:
+                self.last_timestamp = time_now
+            delta_time = time_now - self.last_timestamp
+            self.last_timestamp = time_now
+            if delta_time > delta_max:
+                self.logger.debug(f"got delayed update clocking at {delta_time}")
+                delta_time = 0
+            self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
+            adjusted_delta = delta_time if delta_time <= delta_max else 0
+            post_fusion_gyro = sensor_fusion_gravity(
+                self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
+            )
+            # self.logger.info(f"GYRO: {post_fusion_gyro}")
+        self.gyro_vec.set_value(0, 0, 0)
+        self.accel_vec.set_value(0, 0, 0)
+        self.gyro_update = False
+
+    def process_source_end(self, time_now: float = 0):
         if self.sdl_pad:
             for slot in self.input_slots():
                 value = self[slot]
                 match slot:
                     case "RUMBLE":
-                        if isinstance(value, Vec2):
-                            sdl3.SDL_RumbleGamepad(
-                                self.sdl_pad, value.x, value.y, 1000
-                            )
-    
+                        vec = to_vec2(value)
+                        sdl3.SDL_RumbleGamepad(
+                            self.sdl_pad, int(abs(vec.x)), int(abs(vec.y)), 1000
+                        )
+
+    def set_gyro_calibrating(self, calibrating: bool):
+        self.gyro_calibrating = calibrating
+        if calibrating:
+            self.gyro_calibration.reset()
+
     def handle_event(self, sdl_event):
         gyro_raw = Vec3()
         accel = Vec3()
@@ -79,503 +122,11 @@ class InputPad(ConfigBlock):
                 axis = SingleAxisSource(axis_id)
                 double_axis = DoubleAxisSource.from_single(axis)
                 if double_axis:
-                    val = self@double_axis.name
-                    val = axis.write_vec(val,axis_event.value / 32768.0)
-                    self.set_output_val(double_axis.name,val)
+                    val = self @ double_axis.name
+                    val = axis.write_vec(val, axis_event.value / 32768.0)
+                    self.set_output_val(double_axis.name, val)
                 else:
-                    self.set_output_val(axis.name,axis_event.value / 32768.0)
-            case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
-                sensor_event = sdl_event.gsensor
-                sensor_type = sensor_event.sensor
-                timestamp = sensor_event.sensor_timestamp
-                if sensor_type == sdl3.SDL_SENSOR_GYRO:
-                    self.gyro_update = True
-                    gyro_raw.set_value(*sensor_event.data)
-                    # SDL3 outputs gyro in radians per second
-                    gyro_raw *= RADIANS_TO_DEGREES
-                    if self.last_gyro_time == None:
-                        self.last_gyro_time = timestamp
-                    self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
-                    self.last_gyro_time = timestamp
-                elif sensor_type == sdl3.SDL_SENSOR_ACCEL:
-                    accel.set_value(*sensor_event.data)
-                # if self.gyro_calibrating:
-                #     self.gyro_calibration.update(gyro_raw)
-                #     self.gyro_update = False
-                # else:
-                #     self.gyro_vec += gyro_raw
-                #     self.accel_vec += accel
-            case evt_type if evt_type in (
-                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
-                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
-                sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
-            ):
-                self.touchpad_update = True
-                touch_event = sdl_event.gtouchpad
-                pad_id = touch_event.touchpad
-                finger_id = touch_event.finger
-                key_tuple = (pad_id, finger_id)
-                # if sdl_event.type == sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
-                #     if key_tuple in self.touchpad_state:
-                #         self.touchpad_state.pop(key_tuple)
-                # else:
-                #     x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
-                #     self.touchpad_state[key_tuple] = Vec3(x, y, pressure)
-            case _:
-                self.logger.info("event type: " + str(evt_type))
-
-    def claim_pad(self, pad_id_list:list[sdl3.SDL_JoystickID]):
-        claimed = set()
-        if self.sdl_id in pad_id_list:
-            pad_id_list.remove(self.sdl_id)
-        else:
-            new_pad_id = None
-            for pad_id in pad_id_list:
-                pad_name_bytes = sdl3.SDL_GetGamepadNameForID(pad_id)
-                pad_name = (
-                    pad_name_bytes.decode() if pad_name_bytes else "[Name Unknown]"  # type: ignore
-                )
-                if re.fullmatch(self.controller_name, pad_name):
-                    if self.sdl_pad:
-                        sdl3.SDL_CloseGamepad(self.sdl_pad)
-                    self.sdl_id = pad_id
-                    self.sdl_pad = sdl3.SDL_OpenGamepad(pad_id)
-                    self.logger.info(f"Using Controller '{pad_name}'")
-                    claimed.add(pad_id)
-                    new_pad_id = pad_id
-                    break
-            if new_pad_id:
-                pad_id_list.remove(new_pad_id)
-        return self.sdl_id
-
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        slots = []
-        for sdl_button_enum in SDLButtonSource:
-            slots.append(sdl_button_enum.name)
-        for sdl_axis_enum in SingleAxisSource:
-            slots.append(sdl_axis_enum.name)
-        for sdl_double_axis_enum in DoubleAxisSource:
-            slots.append(sdl_double_axis_enum.name)
-        slots.append("GYRO")
-        slots.append("TOUCHPAD_PRESS")
-        slots.append("PADS")
-        return slots
-    
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return ["RUMBLE"]
-    
-    @classmethod
-    def config_slots(cls) -> typing.List[str]:
-        return ["controller_name", "multi_pad_mode"]
-    
-    def pre_init(self, *args, **kwargs):
-        self.controller_name = ".*"
-        self.multi_pad_mode = "duplicate"
-
-ConfigBlock.register_block_class("PAD", InputPad)
-
-XBOX_BUTTON_MAP = {
-    "A":vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
-    "B":vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
-    "X":vg.XUSB_BUTTON.XUSB_GAMEPAD_X,
-    "Y":vg.XUSB_BUTTON.XUSB_GAMEPAD_Y,
-    "DOWN":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
-    "LEFT":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
-    "RIGHT":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
-    "UP":vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
-    "L1":vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER,
-    "L3":vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB,
-    "R1":vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER,
-    "R3":vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB,
-    "START":vg.XUSB_BUTTON.XUSB_GAMEPAD_START,
-    "BACK":vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK,
-    "GUIDE":vg.XUSB_BUTTON.XUSB_GAMEPAD_GUIDE
-}
-
-class XboxPad(ConfigBlock):
-    vpad: vg.VX360Gamepad | None = None
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return ["A", "B", "X", "Y", "DOWN", "LEFT", "RIGHT", "UP", "LSTICK", "RSTICK", "L1", "L2", "L3", "R1", "R2", "R3", "START", "BACK", "GUIDE"]
-    
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        return ["RUMBLE"]
-    
-    def process(self):
-        if self.vpad:
-            for slot in self.input_slots():
-                value = self[slot]
-                match slot:
-                    case "L2":
-                        if value != None:
-                            self.vpad.left_trigger_float(value)
-                    case "R2":
-                        if value != None:
-                            self.vpad.right_trigger_float(value)
-                    case "LSTICK":
-                        if value != None:
-                            self.vpad.left_joystick_float(value.x,-value.y)
-                    case "RSTICK":
-                        if value != None:
-                            self.vpad.right_joystick_float(value.x,-value.y)
-                    case _:
-                        if value:
-                            self.vpad.press_button(XBOX_BUTTON_MAP[slot])
-                        else:
-                            self.vpad.release_button(XBOX_BUTTON_MAP[slot])
-            self.vpad.update()
-
-    def on_unload(self):
-        self.vpad.unregister_notification()
-        self.vpad = None
-    
-    def on_load(self):
-        self.vpad = vg.VX360Gamepad()
-        self.vpad.register_notification(callback_function=self.virtual_pad_callback)
-    
-    def virtual_pad_callback(
-        self, client, target, large_motor, small_motor, led_number, user_data
-    ):
-        """
-        Callback function triggered at each received state change
-
-        :param client: vigem bus ID
-        :param target: vigem device ID
-        :param large_motor: integer in [0, 255] representing the state of the large motor
-        :param small_motor: integer in [0, 255] representing the state of the small motor
-        :param led_number: integer in [0, 255] representing the state of the LED ring
-        :param user_data: placeholder, do not use
-        """
-        low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
-        high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
-        
-        vec = self@"RUMBLE"
-        if not isinstance(vec,Vec2):
-            vec = Vec2()
-        vec.x, vec.y = low_frequency_rumble, high_frequency_rumble
-        self.set_output_val("RUMBLE", Vec2(low_frequency_rumble, high_frequency_rumble))
-
-ConfigBlock.register_block_class("XBOX", XboxPad)
-
-class Activator(ConfigBlock):
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return ["IN"]
-    
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        return ["OUT"]
-
-ConfigBlock.register_block_class("ACTIVATOR", Activator)
-
-class PyroGyroPad:
-    def __init__(
-        self,
-        sdl_joystick,
-        mapping: Mapping | None = None,
-        web_server: WebServer | None = None,
-        parent: typing.Union["pyrogyro.pyrogyro.PyroGyroMapper", None] = None,  # type: ignore
-    ):
-        self.parent = parent
-        self.logger = logging.getLogger("PyroGyroPad")
-        if not mapping:
-            mapping = Mapping()
-        self.mapping = mapping
-        self.web_server = web_server
-        self.vpad = vg.VX360Gamepad()
-        self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
-        joystick = sdl3.SDL_GetGamepadJoystick(self.sdl_pad)
-        self.sdl_joy = joystick
-        self.sdl_haptic = sdl3.SDL_OpenHapticFromJoystick(joystick)
-        self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
-        self.led = mapping.led
-        self.gyro_calibrating = False
-        self.gyro_calibration = GyroCalibration()
-        self.last_timestamp = None
-        gyro_sensors = (
-            sdl3.SDL_SENSOR_GYRO,
-            sdl3.SDL_SENSOR_GYRO_L,
-            sdl3.SDL_SENSOR_GYRO_R,
-        )
-        accel_sensors = (
-            sdl3.SDL_SENSOR_ACCEL,
-            sdl3.SDL_SENSOR_ACCEL_L,
-            sdl3.SDL_SENSOR_ACCEL_R,
-        )
-        for gyro_sensor in gyro_sensors:
-            if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor):
-                self.logger.info("Gyro Sensor Detected")
-                sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, gyro_sensor, True)
-        for accel_sensor in accel_sensors:
-            if sdl3.SDL_GamepadHasSensor(self.sdl_pad, accel_sensor):
-                self.logger.info("Accel Sensor Detected")
-                sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True)
-
-        self.input_store = InputStore()
-        self.mkb_state = {}
-
-        self.delta_time = 0
-        self.gyro_update = False
-        self.last_gyro_time = 0
-
-        self.combo_sources = {}
-        self.combo_presses_active = set()
-        self.gravity = Vec3()
-        self.gyro_vec = Vec3()
-        self.accel_vec = Vec3()
-        self.leftover_vel = Vec2()
-        self.paired_axis_event_sink = {}
-
-        self.touchpad_state = {}
-        self.touchpad_update = False
-
-    def try_haptic(self):
-        if not self.sdl_haptic:
-            logging.debug("no haptic")
-            return
-        haptic_feat = sdl3.SDL_GetHapticFeatures(self.sdl_haptic)
-        if (int(haptic_feat) & sdl3.SDL_HAPTIC_SINE) == 0:
-            logging.debug("no haptic sine")
-            return
-        effect = sdl3.SDL_HapticEffect()
-        effect_pointer = sdl3.LP_SDL_HapticEffect(effect)
-        effect.type = sdl3.SDL_HAPTIC_SINE
-        effect.periodic.direction.type = sdl3.SDL_HAPTIC_POLAR
-        effect.periodic.direction.dir[0] = 18000
-        effect.periodic.period = 1000
-        effect.periodic.magnitude = 20000
-        effect.periodic.length = 5000
-        effect.periodic.attack_length = 1000
-        effect.periodic.fade_length = 1000
-
-        effect_id = sdl3.SDL_CreateHapticEffect(self.sdl_haptic, effect_pointer)
-        sdl3.SDL_RunHapticEffect(self.sdl_haptic, effect_id, 1)
-        logging.debug("haptic done")
-
-    @property
-    def poll_rate(self):
-        return self.parent.poll_rate if self.parent else DEFAULT_POLL_RATE
-
-    def cleanup(self):
-        if self.vpad:
-            self.vpad.unregister_notification()
-            del self.vpad
-
-    def virtual_pad_callback(
-        self, client, target, large_motor, small_motor, led_number, user_data
-    ):
-        """
-        Callback function triggered at each received state change
-
-        :param client: vigem bus ID
-        :param target: vigem device ID
-        :param large_motor: integer in [0, 255] representing the state of the large motor
-        :param small_motor: integer in [0, 255] representing the state of the small motor
-        :param led_number: integer in [0, 255] representing the state of the LED ring
-        :param user_data: placeholder, do not use
-        """
-        low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
-        high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
-        # we get updates as rumble changes changes, so just set duration to a second
-        # and have later updates overwrite that
-        sdl3.SDL_RumbleGamepad(
-            self.sdl_pad, low_frequency_rumble, high_frequency_rumble, 1000
-        )
-
-    def set_mkb_bool_state(self, target_enum, target_value):
-        old_value = self.mkb_state.get(target_enum, False)
-        if isinstance(target_enum, MouseButtonTarget) and old_value != target_value:
-            if target_value:
-                target_enum.down()
-            else:
-                target_enum.up()
-        elif isinstance(target_enum, KeyboardKeyTarget) and old_value != target_value:
-            if target_value:
-                target_enum.down()
-            else:
-                target_enum.up()
-        self.mkb_state[target_enum] = target_value
-
-    @property
-    def real_controller_name(self):
-        return sdl3.SDL_GetGamepadName(self.sdl_pad).decode()
-
-    @property
-    def real_controller_uuid(self):
-        joystick_uuid_bytes = sdl3.SDL_GetGamepadGUID(self.sdl_pad).data[0:16]
-        joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
-        return joystick_uuid
-
-    def evaluate_autoload_mappings(self, mappings, exe_name, window_title):
-        potential_mappings = []
-        controller_name = self.real_controller_name
-        new_mapping = None
-        for mapping in mappings:
-            if all(
-                (
-                    re.fullmatch(
-                        mapping.autoload.match_controller_name, controller_name
-                    ),
-                    re.fullmatch(mapping.autoload.match_window_name, window_title),
-                    re.fullmatch(mapping.autoload.match_exe_name, exe_name),
-                )
-            ):
-                potential_mappings.append(mapping)
-        if potential_mappings:
-            if len(potential_mappings) == 1:
-                new_mapping = potential_mappings[0]
-            else:
-                potential_mappings.sort(key=Mapping.count_autoload_specificity)
-                best_match = potential_mappings[-1]
-                final_value = best_match.autoload.count_specificity()
-                remaining_mappings = len(
-                    [
-                        mapping
-                        for mapping in potential_mappings
-                        if mapping.autoload.count_specificity() == final_value
-                    ]
-                )
-                if remaining_mappings == 1:
-                    new_mapping = best_match
-        if new_mapping and (new_mapping != self.mapping):
-            self.logger.info(
-                f"Applying mapping '{new_mapping.name}' to PyroGyro pad for controller '{controller_name}'"
-            )
-            self.mapping = new_mapping
-            self.led = self.mapping.led
-            self.mapping.reset()
-
-    def set_gyro_calibrating(self, calibrating: bool):
-        self.gyro_calibrating = calibrating
-        if calibrating:
-            self.gyro_calibration.reset()
-
-    def send_value(self, source_value, target, source=None):
-        match target:
-            case DoubleAxisTarget():
-                if isinstance(source_value, Vec2):
-                    match target:
-                        case DoubleAxisTarget.X_LSTICK:
-                            self.vpad.left_joystick_float(
-                                source_value.x, -source_value.y
-                            )
-                        case DoubleAxisTarget.X_RSTICK:
-                            self.vpad.right_joystick_float(
-                                source_value.x, -source_value.y
-                            )
-            case SingleAxisTarget():
-                float_val = to_float(source_value)
-                match target:
-                    case SingleAxisTarget.X_L2:
-                        self.vpad.left_trigger_float(float_val)
-                    case SingleAxisTarget.X_R2:
-                        self.vpad.right_trigger_float(float_val)
-            case ButtonTarget():
-                if to_bool(source_value):
-                    self.vpad.press_button(target.value)
-                else:
-                    self.vpad.release_button(target.value)
-            case KeyboardKeyTarget():
-                self.set_mkb_bool_state(target, to_bool(source_value))
-            case MouseButtonTarget():
-                self.set_mkb_bool_state(target, to_bool(source_value))
-            case MouseTarget():
-                if isinstance(source_value, Vec2):
-                    target.move_mouse(
-                        source_value.x,
-                        source_value.y,
-                    )
-            case LayerTarget():
-                self.mapping.set_layer_activation(target.layer, bool(source_value))
-
-    def on_poll_start(self):
-        self.gyro_vec.set_value(0, 0, 0)
-        self.accel_vec.set_value(0, 0, 0)
-        self.delta_time = 0.0
-        self.gyro_update = False
-        self.touchpad_update = False
-
-    def send_to_web_server(self, event, value):
-        remap = {"l3": "lstick", "r3": "rstick"}
-        if isinstance(value, bool) or isinstance(value, float):
-            value = to_float(value)
-            source = event.name.lower()
-            source = remap.get(source, source)
-
-            if self.web_server:
-                self.web_server.send_message(
-                    {"source": source, "type": "float", "value": value}
-                )
-        elif isinstance(value, Vec2):
-            if event != GyroSource.GYRO:
-                source = event.name.lower()
-                source = remap.get(source, source)
-
-                if self.web_server:
-                    self.web_server.send_message(
-                        {"source": source, "type": "vec2", "x": value.x, "y": value.y}
-                    )
-
-    def handle_event(self, sdl_event):
-        gyro_raw = Vec3()
-        accel = Vec3()
-        match sdl_event.type:
-            case sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN | sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
-                button_event = sdl_event.gbutton
-                timestamp = int(button_event.timestamp)
-                enum_val = SDLButtonSource(int(button_event.button))
-                button_name = enum_val.name
-                self.logger.info(
-                    f"{button_name} {'pressed' if button_event.down else 'released'}"
-                )
-                pyro_event = InputEvent(
-                    enum_val,
-                    EventType.PRESS if button_event.down else EventType.RELEASE,
-                    button_event.down,
-                    timestamp=timestamp,
-                )
-                self.input_store.put_input(pyro_event)
-            case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
-                axis_event = sdl_event.gaxis
-                timestamp = int(axis_event.timestamp)
-                axis_id = axis_event.axis
-                enum_val = SingleAxisSource(axis_id)
-                pyro_event = InputEvent(
-                    enum_val,
-                    EventType.UPDATE,
-                    axis_event.value / 32768.0,
-                    timestamp=timestamp,
-                )
-                self.input_store.put_input(pyro_event)
-
-                double_enum = get_double_source_for_axis(enum_val)
-                if double_enum:
-                    other_axis = double_enum.get_other_axis(enum_val)
-                    if other_axis not in self.paired_axis_event_sink:
-                        self.paired_axis_event_sink[enum_val] = (
-                            axis_event.value / 32768.0
-                        )
-                    else:
-                        self.paired_axis_event_sink[enum_val] = (
-                            axis_event.value / 32768.0
-                        )
-                        this_value = axis_event.value / 32768.0
-                        other_value = self.paired_axis_event_sink.get(other_axis)
-                        if other_value:
-                            if double_enum.value.index(enum_val) == 0:
-                                target_value = Vec2(this_value, other_value)
-                            else:
-                                target_value = Vec2(other_value, this_value)
-                            paired_event = InputEvent(
-                                double_enum,
-                                EventType.UPDATE,
-                                target_value,
-                                timestamp=timestamp,
-                            )
-                            self.input_store.put_input(paired_event)
+                    self.set_output_val(axis.name, axis_event.value / 32768.0)
             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
                 sensor_event = sdl_event.gsensor
                 sensor_type = sensor_event.sensor
@@ -607,58 +158,579 @@ class PyroGyroPad:
                 pad_id = touch_event.touchpad
                 finger_id = touch_event.finger
                 key_tuple = (pad_id, finger_id)
-                if sdl_event.type == sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
-                    if key_tuple in self.touchpad_state:
-                        self.touchpad_state.pop(key_tuple)
-                else:
-                    x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
-                    self.touchpad_state[key_tuple] = Vec3(x, y, pressure)
+                # if sdl_event.type == sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
+                #     if key_tuple in self.touchpad_state:
+                #         self.touchpad_state.pop(key_tuple)
+                # else:
+                #     x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
+                #     self.touchpad_state[key_tuple] = Vec3(x, y, pressure)
             case _:
                 self.logger.info("event type: " + str(evt_type))
 
-    def send_changed_input_values(self, delta_time: float = 0.0):
-        changed_inputs = self.input_store.get_inputs()
-        self.mapping._control_graph.process(changed_inputs, self, delta_time=delta_time)
-        for event in changed_inputs:
-            self.send_to_web_server(event.source, event.value)
-        self.input_store.clear()
+    def claim_pad(self, pad_id_list: list[sdl3.SDL_JoystickID]):
+        claimed = set()
+        if self.sdl_id in pad_id_list:
+            pad_id_list.remove(self.sdl_id)
+        else:
+            new_pad_id = None
+            for pad_id in pad_id_list:
+                pad_name_bytes = sdl3.SDL_GetGamepadNameForID(pad_id)
+                pad_name = (
+                    pad_name_bytes.decode() if pad_name_bytes else "[Name Unknown]"  # type: ignore
+                )
+                if re.fullmatch(self.controller_name, pad_name):
+                    if self.sdl_pad:
+                        sdl3.SDL_CloseGamepad(self.sdl_pad)
+                    self.sdl_id = pad_id
+                    self.sdl_pad = sdl3.SDL_OpenGamepad(pad_id)
+                    self.init_gyro()
+                    self.logger.info(f"Using Controller '{pad_name}'")
+                    claimed.add(pad_id)
+                    new_pad_id = pad_id
+                    break
+            if new_pad_id:
+                pad_id_list.remove(new_pad_id)
+        return self.sdl_id
 
-    def update(self, time_now: float):
-        delta_max = 5 / self.poll_rate
-        if not self.last_timestamp:
-            self.last_timestamp = time_now
-        delta_time = time_now - self.last_timestamp
-        if delta_time > delta_max:
-            self.logger.debug(f"got delayed update clocking at {delta_time}")
-            delta_time = 0
-        self.led.update(time_now)
-        color = self.led.get_rgb_color()
-        color_r, color_g, color_b = (
-            int(color.x * 255),
-            int(color.y * 255),
-            int(color.z * 255),
-        )
-        sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
-        if self.gyro_update:
-            self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
-            adjusted_delta = self.delta_time if self.delta_time <= delta_max else 0
-            sensor_fusion_gravity(
-                self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
-            )
-            pixel_vel = self.mapping.gyro.gyro_pixels(
-                self.gyro_vec,
-                self.gravity.normalized(),
-                adjusted_delta,
-                real_world_calibration=self.mapping.get_real_world_calibration(),
-                in_game_sens=self.mapping.get_in_game_sens(),
-            )
-            pyro_event = InputEvent(GyroSource.GYRO, EventType.UPDATE, pixel_vel)
-            self.input_store.put_input(pyro_event)
-        if self.touchpad_update:
-            pyro_event = InputEvent(
-                TouchSource.TOUCHPAD, EventType.UPDATE, self.touchpad_state
-            )
-            self.input_store.put_input(pyro_event)
-        self.send_changed_input_values(delta_time=delta_time)
-        self.vpad.update()
-        self.last_timestamp = time_now
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        slots = []
+        for sdl_button_enum in SDLButtonSource:
+            slots.append(sdl_button_enum.name)
+        for sdl_axis_enum in SingleAxisSource:
+            slots.append(sdl_axis_enum.name)
+        for sdl_double_axis_enum in DoubleAxisSource:
+            slots.append(sdl_double_axis_enum.name)
+        slots.append("GYRO")
+        slots.append("TOUCHPAD_PRESS")
+        slots.append("PADS")
+        return slots
+
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return ["RUMBLE"]
+
+    @classmethod
+    def config_slots(cls) -> typing.List[str]:
+        return ["controller_name", "multi_pad_mode"]
+
+    def pre_init(self, *args, **kwargs):
+        self.controller_name = ".*"
+        self.multi_pad_mode = "duplicate"
+
+
+ConfigBlock.register_block_class("PAD", InputPad)
+
+XBOX_BUTTON_MAP = {
+    "A": vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
+    "B": vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
+    "X": vg.XUSB_BUTTON.XUSB_GAMEPAD_X,
+    "Y": vg.XUSB_BUTTON.XUSB_GAMEPAD_Y,
+    "DOWN": vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
+    "LEFT": vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
+    "RIGHT": vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
+    "UP": vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
+    "L1": vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER,
+    "L3": vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB,
+    "R1": vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER,
+    "R3": vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB,
+    "START": vg.XUSB_BUTTON.XUSB_GAMEPAD_START,
+    "BACK": vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK,
+    "GUIDE": vg.XUSB_BUTTON.XUSB_GAMEPAD_GUIDE,
+}
+
+
+class XboxPad(ConfigBlock):
+    vpad: vg.VX360Gamepad | None = None
+
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return [
+            "A",
+            "B",
+            "X",
+            "Y",
+            "DOWN",
+            "LEFT",
+            "RIGHT",
+            "UP",
+            "LSTICK",
+            "RSTICK",
+            "L1",
+            "L2",
+            "L3",
+            "R1",
+            "R2",
+            "R3",
+            "START",
+            "BACK",
+            "GUIDE",
+        ]
+
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        return ["RUMBLE"]
+
+    def process(self, time_now: float = 0):
+        if self.vpad:
+            for slot in self.input_slots():
+                slot_input = self[slot]
+                value = slot_input.value if slot_input else None
+                match slot:
+                    case "L2":
+                        if value != None:
+                            self.vpad.left_trigger_float(to_float(value))
+                    case "R2":
+                        if value != None:
+                            self.vpad.right_trigger_float(to_float(value))
+                    case "LSTICK":
+                        if value != None:
+                            vec_in = to_vec2(value)
+                            self.vpad.left_joystick_float(vec_in.x, -vec_in.y)
+                    case "RSTICK":
+                        if value != None:
+                            vec_in = to_vec2(value)
+                            self.vpad.right_joystick_float(vec_in.x, -vec_in.y)
+                    case _:
+                        if to_bool(value):
+                            self.vpad.press_button(XBOX_BUTTON_MAP[slot])
+                        else:
+                            self.vpad.release_button(XBOX_BUTTON_MAP[slot])
+            self.vpad.update()
+
+    def on_unload(self):
+        if self.vpad:
+            self.vpad.unregister_notification()  # type: ignore
+            self.vpad = None
+
+    def on_load(self):
+        self.vpad = vg.VX360Gamepad()
+        self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
+
+    def virtual_pad_callback(
+        self, client, target, large_motor, small_motor, led_number, user_data
+    ):
+        """
+        Callback function triggered at each received state change
+
+        :param client: vigem bus ID
+        :param target: vigem device ID
+        :param large_motor: integer in [0, 255] representing the state of the large motor
+        :param small_motor: integer in [0, 255] representing the state of the small motor
+        :param led_number: integer in [0, 255] representing the state of the LED ring
+        :param user_data: placeholder, do not use
+        """
+        low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
+        high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
+
+        vec = self @ "RUMBLE"
+        if not isinstance(vec, Vec2):
+            vec = Vec2()
+        vec.x, vec.y = low_frequency_rumble, high_frequency_rumble
+        self.set_output_val("RUMBLE", Vec2(low_frequency_rumble, high_frequency_rumble))
+
+
+ConfigBlock.register_block_class("XBOX", XboxPad)
+
+# class Activator(ConfigBlock):
+#     @classmethod
+#     def input_slots(cls) -> typing.List[str]:
+#         return ["IN"]
+
+#     @classmethod
+#     def output_slots(cls) -> typing.List[str]:
+#         return ["OUT"]
+
+# ConfigBlock.register_block_class("ACTIVATOR", Activator)
+
+# class PyroGyroPad:
+#     def __init__(
+#         self,
+#         sdl_joystick,
+#         mapping: Mapping | None = None,
+#         web_server: WebServer | None = None,
+#         parent: typing.Union["pyrogyro.pyrogyro.PyroGyroMapper", None] = None,  # type: ignore
+#     ):
+#         self.parent = parent
+#         self.logger = logging.getLogger("PyroGyroPad")
+#         if not mapping:
+#             mapping = Mapping()
+#         self.mapping = mapping
+#         self.web_server = web_server
+#         self.vpad = vg.VX360Gamepad()
+#         self.sdl_pad = sdl3.SDL_OpenGamepad(sdl_joystick)
+#         joystick = sdl3.SDL_GetGamepadJoystick(self.sdl_pad)
+#         self.sdl_joy = joystick
+#         self.sdl_haptic = sdl3.SDL_OpenHapticFromJoystick(joystick)
+#         self.vpad.register_notification(callback_function=self.virtual_pad_callback)  # type: ignore
+#         self.led = mapping.led
+#         self.gyro_calibrating = False
+#         self.gyro_calibration = GyroCalibration()
+#         self.last_timestamp = None
+#         gyro_sensors = (
+#             sdl3.SDL_SENSOR_GYRO,
+#             sdl3.SDL_SENSOR_GYRO_L,
+#             sdl3.SDL_SENSOR_GYRO_R,
+#         )
+#         accel_sensors = (
+#             sdl3.SDL_SENSOR_ACCEL,
+#             sdl3.SDL_SENSOR_ACCEL_L,
+#             sdl3.SDL_SENSOR_ACCEL_R,
+#         )
+#         for gyro_sensor in gyro_sensors:
+#             if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor):
+#                 self.logger.info("Gyro Sensor Detected")
+#                 sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, gyro_sensor, True)
+#         for accel_sensor in accel_sensors:
+#             if sdl3.SDL_GamepadHasSensor(self.sdl_pad, accel_sensor):
+#                 self.logger.info("Accel Sensor Detected")
+#                 sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True)
+
+#         self.input_store = InputStore()
+#         self.mkb_state = {}
+
+#         self.delta_time = 0
+#         self.gyro_update = False
+#         self.last_gyro_time = 0
+
+#         self.combo_sources = {}
+#         self.combo_presses_active = set()
+#         self.gravity = Vec3()
+#         self.gyro_vec = Vec3()
+#         self.accel_vec = Vec3()
+#         self.leftover_vel = Vec2()
+#         self.paired_axis_event_sink = {}
+
+#         self.touchpad_state = {}
+#         self.touchpad_update = False
+
+#     def try_haptic(self):
+#         if not self.sdl_haptic:
+#             logging.debug("no haptic")
+#             return
+#         haptic_feat = sdl3.SDL_GetHapticFeatures(self.sdl_haptic)
+#         if (int(haptic_feat) & sdl3.SDL_HAPTIC_SINE) == 0:
+#             logging.debug("no haptic sine")
+#             return
+#         effect = sdl3.SDL_HapticEffect()
+#         effect_pointer = sdl3.LP_SDL_HapticEffect(effect)
+#         effect.type = sdl3.SDL_HAPTIC_SINE
+#         effect.periodic.direction.type = sdl3.SDL_HAPTIC_POLAR
+#         effect.periodic.direction.dir[0] = 18000
+#         effect.periodic.period = 1000
+#         effect.periodic.magnitude = 20000
+#         effect.periodic.length = 5000
+#         effect.periodic.attack_length = 1000
+#         effect.periodic.fade_length = 1000
+
+#         effect_id = sdl3.SDL_CreateHapticEffect(self.sdl_haptic, effect_pointer)
+#         sdl3.SDL_RunHapticEffect(self.sdl_haptic, effect_id, 1)
+#         logging.debug("haptic done")
+
+#     @property
+#     def poll_rate(self):
+#         return self.parent.poll_rate if self.parent else DEFAULT_POLL_RATE
+
+#     def cleanup(self):
+#         if self.vpad:
+#             self.vpad.unregister_notification()
+#             del self.vpad
+
+#     def virtual_pad_callback(
+#         self, client, target, large_motor, small_motor, led_number, user_data
+#     ):
+#         """
+#         Callback function triggered at each received state change
+
+#         :param client: vigem bus ID
+#         :param target: vigem device ID
+#         :param large_motor: integer in [0, 255] representing the state of the large motor
+#         :param small_motor: integer in [0, 255] representing the state of the small motor
+#         :param led_number: integer in [0, 255] representing the state of the LED ring
+#         :param user_data: placeholder, do not use
+#         """
+#         low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
+#         high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
+#         # we get updates as rumble changes changes, so just set duration to a second
+#         # and have later updates overwrite that
+#         sdl3.SDL_RumbleGamepad(
+#             self.sdl_pad, low_frequency_rumble, high_frequency_rumble, 1000
+#         )
+
+#     def set_mkb_bool_state(self, target_enum, target_value):
+#         old_value = self.mkb_state.get(target_enum, False)
+#         if isinstance(target_enum, MouseButtonTarget) and old_value != target_value:
+#             if target_value:
+#                 target_enum.down()
+#             else:
+#                 target_enum.up()
+#         elif isinstance(target_enum, KeyboardKeyTarget) and old_value != target_value:
+#             if target_value:
+#                 target_enum.down()
+#             else:
+#                 target_enum.up()
+#         self.mkb_state[target_enum] = target_value
+
+#     @property
+#     def real_controller_name(self):
+#         return sdl3.SDL_GetGamepadName(self.sdl_pad).decode()
+
+#     @property
+#     def real_controller_uuid(self):
+#         joystick_uuid_bytes = sdl3.SDL_GetGamepadGUID(self.sdl_pad).data[0:16]
+#         joystick_uuid = uuid.UUID(bytes=bytes(joystick_uuid_bytes))
+#         return joystick_uuid
+
+#     def evaluate_autoload_mappings(self, mappings, exe_name, window_title):
+#         potential_mappings = []
+#         controller_name = self.real_controller_name
+#         new_mapping = None
+#         for mapping in mappings:
+#             if all(
+#                 (
+#                     re.fullmatch(
+#                         mapping.autoload.match_controller_name, controller_name
+#                     ),
+#                     re.fullmatch(mapping.autoload.match_window_name, window_title),
+#                     re.fullmatch(mapping.autoload.match_exe_name, exe_name),
+#                 )
+#             ):
+#                 potential_mappings.append(mapping)
+#         if potential_mappings:
+#             if len(potential_mappings) == 1:
+#                 new_mapping = potential_mappings[0]
+#             else:
+#                 potential_mappings.sort(key=Mapping.count_autoload_specificity)
+#                 best_match = potential_mappings[-1]
+#                 final_value = best_match.autoload.count_specificity()
+#                 remaining_mappings = len(
+#                     [
+#                         mapping
+#                         for mapping in potential_mappings
+#                         if mapping.autoload.count_specificity() == final_value
+#                     ]
+#                 )
+#                 if remaining_mappings == 1:
+#                     new_mapping = best_match
+#         if new_mapping and (new_mapping != self.mapping):
+#             self.logger.info(
+#                 f"Applying mapping '{new_mapping.name}' to PyroGyro pad for controller '{controller_name}'"
+#             )
+#             self.mapping = new_mapping
+#             self.led = self.mapping.led
+#             self.mapping.reset()
+
+#     def set_gyro_calibrating(self, calibrating: bool):
+#         self.gyro_calibrating = calibrating
+#         if calibrating:
+#             self.gyro_calibration.reset()
+
+#     def send_value(self, source_value, target, source=None):
+#         match target:
+#             case DoubleAxisTarget():
+#                 if isinstance(source_value, Vec2):
+#                     match target:
+#                         case DoubleAxisTarget.X_LSTICK:
+#                             self.vpad.left_joystick_float(
+#                                 source_value.x, -source_value.y
+#                             )
+#                         case DoubleAxisTarget.X_RSTICK:
+#                             self.vpad.right_joystick_float(
+#                                 source_value.x, -source_value.y
+#                             )
+#             case SingleAxisTarget():
+#                 float_val = to_float(source_value)
+#                 match target:
+#                     case SingleAxisTarget.X_L2:
+#                         self.vpad.left_trigger_float(float_val)
+#                     case SingleAxisTarget.X_R2:
+#                         self.vpad.right_trigger_float(float_val)
+#             case ButtonTarget():
+#                 if to_bool(source_value):
+#                     self.vpad.press_button(target.value)
+#                 else:
+#                     self.vpad.release_button(target.value)
+#             case KeyboardKeyTarget():
+#                 self.set_mkb_bool_state(target, to_bool(source_value))
+#             case MouseButtonTarget():
+#                 self.set_mkb_bool_state(target, to_bool(source_value))
+#             case MouseTarget():
+#                 if isinstance(source_value, Vec2):
+#                     target.move_mouse(
+#                         source_value.x,
+#                         source_value.y,
+#                     )
+#             case LayerTarget():
+#                 self.mapping.set_layer_activation(target.layer, bool(source_value))
+
+#     def on_poll_start(self):
+#         self.gyro_vec.set_value(0, 0, 0)
+#         self.accel_vec.set_value(0, 0, 0)
+#         self.delta_time = 0.0
+#         self.gyro_update = False
+#         self.touchpad_update = False
+
+#     def send_to_web_server(self, event, value):
+#         remap = {"l3": "lstick", "r3": "rstick"}
+#         if isinstance(value, bool) or isinstance(value, float):
+#             value = to_float(value)
+#             source = event.name.lower()
+#             source = remap.get(source, source)
+
+#             if self.web_server:
+#                 self.web_server.send_message(
+#                     {"source": source, "type": "float", "value": value}
+#                 )
+#         elif isinstance(value, Vec2):
+#             if event != GyroSource.GYRO:
+#                 source = event.name.lower()
+#                 source = remap.get(source, source)
+
+#                 if self.web_server:
+#                     self.web_server.send_message(
+#                         {"source": source, "type": "vec2", "x": value.x, "y": value.y}
+#                     )
+
+#     def handle_event(self, sdl_event):
+#         gyro_raw = Vec3()
+#         accel = Vec3()
+#         match sdl_event.type:
+#             case sdl3.SDL_EVENT_GAMEPAD_BUTTON_DOWN | sdl3.SDL_EVENT_GAMEPAD_BUTTON_UP:
+#                 button_event = sdl_event.gbutton
+#                 timestamp = int(button_event.timestamp)
+#                 enum_val = SDLButtonSource(int(button_event.button))
+#                 button_name = enum_val.name
+#                 self.logger.info(
+#                     f"{button_name} {'pressed' if button_event.down else 'released'}"
+#                 )
+#                 pyro_event = InputEvent(
+#                     enum_val,
+#                     EventType.PRESS if button_event.down else EventType.RELEASE,
+#                     button_event.down,
+#                     timestamp=timestamp,
+#                 )
+#                 self.input_store.put_input(pyro_event)
+#             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
+#                 axis_event = sdl_event.gaxis
+#                 timestamp = int(axis_event.timestamp)
+#                 axis_id = axis_event.axis
+#                 enum_val = SingleAxisSource(axis_id)
+#                 pyro_event = InputEvent(
+#                     enum_val,
+#                     EventType.UPDATE,
+#                     axis_event.value / 32768.0,
+#                     timestamp=timestamp,
+#                 )
+#                 self.input_store.put_input(pyro_event)
+
+#                 double_enum = get_double_source_for_axis(enum_val)
+#                 if double_enum:
+#                     other_axis = double_enum.get_other_axis(enum_val)
+#                     if other_axis not in self.paired_axis_event_sink:
+#                         self.paired_axis_event_sink[enum_val] = (
+#                             axis_event.value / 32768.0
+#                         )
+#                     else:
+#                         self.paired_axis_event_sink[enum_val] = (
+#                             axis_event.value / 32768.0
+#                         )
+#                         this_value = axis_event.value / 32768.0
+#                         other_value = self.paired_axis_event_sink.get(other_axis)
+#                         if other_value:
+#                             if double_enum.value.index(enum_val) == 0:
+#                                 target_value = Vec2(this_value, other_value)
+#                             else:
+#                                 target_value = Vec2(other_value, this_value)
+#                             paired_event = InputEvent(
+#                                 double_enum,
+#                                 EventType.UPDATE,
+#                                 target_value,
+#                                 timestamp=timestamp,
+#                             )
+#                             self.input_store.put_input(paired_event)
+#             case sdl3.SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
+#                 sensor_event = sdl_event.gsensor
+#                 sensor_type = sensor_event.sensor
+#                 timestamp = sensor_event.sensor_timestamp
+#                 if sensor_type == sdl3.SDL_SENSOR_GYRO:
+#                     self.gyro_update = True
+#                     gyro_raw.set_value(*sensor_event.data)
+#                     # SDL3 outputs gyro in radians per second
+#                     gyro_raw *= RADIANS_TO_DEGREES
+#                     if self.last_gyro_time == None:
+#                         self.last_gyro_time = timestamp
+#                     self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
+#                     self.last_gyro_time = timestamp
+#                 elif sensor_type == sdl3.SDL_SENSOR_ACCEL:
+#                     accel.set_value(*sensor_event.data)
+#                 if self.gyro_calibrating:
+#                     self.gyro_calibration.update(gyro_raw)
+#                     self.gyro_update = False
+#                 else:
+#                     self.gyro_vec += gyro_raw
+#                     self.accel_vec += accel
+#             case evt_type if evt_type in (
+#                 sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN,
+#                 sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
+#                 sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
+#             ):
+#                 self.touchpad_update = True
+#                 touch_event = sdl_event.gtouchpad
+#                 pad_id = touch_event.touchpad
+#                 finger_id = touch_event.finger
+#                 key_tuple = (pad_id, finger_id)
+#                 if sdl_event.type == sdl3.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
+#                     if key_tuple in self.touchpad_state:
+#                         self.touchpad_state.pop(key_tuple)
+#                 else:
+#                     x, y, pressure = touch_event.x, touch_event.y, touch_event.pressure
+#                     self.touchpad_state[key_tuple] = Vec3(x, y, pressure)
+#             case _:
+#                 self.logger.info("event type: " + str(evt_type))
+
+#     def send_changed_input_values(self, delta_time: float = 0.0):
+#         changed_inputs = self.input_store.get_inputs()
+#         self.mapping._control_graph.process(changed_inputs, self, delta_time=delta_time)
+#         for event in changed_inputs:
+#             self.send_to_web_server(event.source, event.value)
+#         self.input_store.clear()
+
+#     def update(self, time_now: float):
+#         delta_max = 5 / self.poll_rate
+#         if not self.last_timestamp:
+#             self.last_timestamp = time_now
+#         delta_time = time_now - self.last_timestamp
+#         if delta_time > delta_max:
+#             self.logger.debug(f"got delayed update clocking at {delta_time}")
+#             delta_time = 0
+#         self.led.update(time_now)
+#         color = self.led.get_rgb_color()
+#         color_r, color_g, color_b = (
+#             int(color.x * 255),
+#             int(color.y * 255),
+#             int(color.z * 255),
+#         )
+#         sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
+#         if self.gyro_update:
+#             self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
+#             adjusted_delta = self.delta_time if self.delta_time <= delta_max else 0
+#             sensor_fusion_gravity(
+#                 self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
+#             )
+#             pixel_vel = self.mapping.gyro.gyro_pixels(
+#                 self.gyro_vec,
+#                 self.gravity.normalized(),
+#                 adjusted_delta,
+#                 real_world_calibration=self.mapping.get_real_world_calibration(),
+#                 in_game_sens=self.mapping.get_in_game_sens(),
+#             )
+#             pyro_event = InputEvent(GyroSource.GYRO, EventType.UPDATE, pixel_vel)
+#             self.input_store.put_input(pyro_event)
+#         if self.touchpad_update:
+#             pyro_event = InputEvent(
+#                 TouchSource.TOUCHPAD, EventType.UPDATE, self.touchpad_state
+#             )
+#             self.input_store.put_input(pyro_event)
+#         self.send_changed_input_values(delta_time=delta_time)
+#         self.vpad.update()
+#         self.last_timestamp = time_now

@@ -176,18 +176,10 @@ class GyroConfig(ConfigBlock):
     smooth_threshold: typing.Optional[float] = None
     tightening_theshold: typing.Optional[float] = None
     smooth_buffer = deque()
-
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return ["GYRO", "GYRO_ON", "GYRO_OFF"]
     
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        return ["MOUSE"]
-    
-    @classmethod
-    def config_slots(cls) -> typing.List[str]:
-        return ["real_world_calibration","in_game_sens","mode","sens","fast_sens","slow_threshold","fast_threshold","smooth_window","smooth_threshold","tightening_theshold"]
+    _input_slots = ("GYRO", "GYRO_ON", "GYRO_OFF")
+    _output_slots = ("MOUSE",)
+    _config_slots = ("real_world_calibration","in_game_sens","mode","sens","fast_sens","slow_threshold","fast_threshold","smooth_window","smooth_threshold","tightening_theshold")
 
     def post_init(self, *args, **kwargs):
         if isinstance(self.mode,str):

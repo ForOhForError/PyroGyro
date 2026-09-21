@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 pyrogyro = "pyrogyro.pyrogyro:appmain"
+profile = "pyrogyro.pyrogyro:profile"
 dist = "pyrogyro.project_util:build_windows_dist"
 download-sdl = "pyrogyro.project_util:download_sdl"
 build-front = "pyrogyro.project_util:build_and_copy_frontend"

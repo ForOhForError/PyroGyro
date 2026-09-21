@@ -72,7 +72,7 @@ class Config:
             if block.is_source():
                 sources.add(block)
             block.process(delta_time=delta_time)
-            for slot in block.output_slots():
+            for slot in block._output_slots:
                 if block[slot]:
                     output_value = block @ slot
                     for dest_name, dest_slot in block.get_destinations(slot):
@@ -94,7 +94,7 @@ class Config:
 
         while len(visit) > 0:
             next = visit.pop()
-            for slot in next.output_slots():
+            for slot in next._output_slots:
                 for block_name, slot_name in next.get_destinations(slot):
                     block = self.blocks.get(block_name)
                     if block and (block not in done) and (block not in visit):
@@ -121,6 +121,9 @@ class ConfigBlock:
         BLOCK_TYPES: typing.Dict[str, type] = {}
 
     _loaded = False
+    _input_slots = ()
+    _output_slots = ()
+    _config_slots = ()
     _output_vals: dict[str, typing.Any] = {}
     _input_vals: dict[str, InputValue] = {}
 
@@ -155,13 +158,13 @@ class ConfigBlock:
         pass
 
     def __matmul__(self, slot):
-        if slot in self.output_slots():
+        if slot in self._output_slots:
             return self._output_vals.get(slot, 0.0)
         else:
             raise KeyError(f"No output slot {slot}")
 
     def set_output_val(self, slot, value):
-        if slot in self.output_slots():
+        if slot in self._output_slots:
             self._output_vals[slot] = value
         else:
             raise KeyError(f"No output slot {slot}")
@@ -186,7 +189,7 @@ class ConfigBlock:
             self._loaded = False
 
     def get_destinations(self, slot) -> typing.List[typing.Tuple[str, str]]:
-        if slot in self._output_slots():
+        if slot in self._output_slots:
             dest = self[slot]
             if not dest:
                 return []
@@ -205,38 +208,11 @@ class ConfigBlock:
     def is_source(cls) -> bool:
         return False
 
-    @classmethod
-    @cache
-    def _input_slots(cls) -> typing.List[str]:
-        return cls.input_slots()
-
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return []
-
-    @classmethod
-    @cache
-    def _output_slots(cls) -> typing.List[str]:
-        return cls.output_slots()
-
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        return []
-
-    @classmethod
-    @cache
-    def _config_slots(cls) -> typing.List[str]:
-        return cls.config_slots()
-
-    @classmethod
-    def config_slots(cls) -> typing.List[str]:
-        return []
-
     def processable(self) -> bool:
         return True
 
     def __setitem__(self, key, val):
-        if key in self._input_slots():
+        if key in self._input_slots:
             val_obj = self._input_vals.get(key, InputValue(False))
             self._input_vals[key] = val_obj
             old_bool, new_bool = bool(val_obj.value), bool(val)
@@ -251,15 +227,15 @@ class ConfigBlock:
             else:
                 val_obj.state = InputState.UPDATE
                 self.on_update(key, val_obj)
-        elif key in self._output_slots() or key in self._config_slots():
+        elif key in self._output_slots or key in self._config_slots:
             setattr(self, key, val)
         else:
             raise KeyError(f"{type(self).__name__} has no assignable slot {key}")
 
     def __getitem__(self, key):
-        if key in self._input_slots():
+        if key in self._input_slots:
             return self._input_vals.get(key, InputValue(False))
-        elif key in self._config_slots() or key in self._output_slots():
+        elif key in self._config_slots or key in self._output_slots:
             if hasattr(self, key):
                 return getattr(self, key)
             else:
@@ -287,12 +263,12 @@ class ConfigBlock:
         for key in data:
             if key == "TYPE":
                 pass
-            elif key in self._output_slots():
+            elif key in self._output_slots:
                 try:
                     self[key] = data[key]
                 except ValueError:
                     CONFIG_LOGGER.exception("Error setting slot")
-            elif key in self._input_slots() or key in self._config_slots():
+            elif key in self._input_slots or key in self._config_slots:
                 try:
                     self[key] = data[key]
                 except ValueError:
@@ -307,18 +283,9 @@ class ConfigBlock:
 
 class Multiplier(ConfigBlock):
     factor = 1
-
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return ["IN"]
-
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        return ["OUT"]
-
-    @classmethod
-    def config_slots(cls) -> typing.List[str]:
-        return ["factor"]
+    _input_slots = ("IN",)
+    _output_slots = ("OUT",)
+    _config_slots = ("factor",)
 
     def process(self, delta_time: float = 0):
         try:
@@ -327,6 +294,5 @@ class Multiplier(ConfigBlock):
             self.set_output_val("OUT", val)
         except Exception:
             pass
-
 
 ConfigBlock.register_block_class("MULT", Multiplier)

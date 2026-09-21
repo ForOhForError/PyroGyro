@@ -28,6 +28,15 @@ class InputPad(ConfigBlock):
     gyro_data = GyroData(Vec3(),Vec3())
     delta_time = 0.0
     gyro_update = False
+    
+    _output_slots = (
+        tuple(sdl_button_enum.name for sdl_button_enum in SDLButtonSource) +
+        tuple(sdl_axis_enum.name for sdl_axis_enum in SingleAxisSource) +
+        tuple(sdl_double_axis_enum.name for sdl_double_axis_enum in DoubleAxisSource) +
+        ("GYRO", "TOUCHPAD_PRESS", "PADS")
+    )
+    _input_slots = ("RUMBLE",)
+    _config_slots = ("controller_name", "multi_pad_mode")
 
     def __del__(self):
         if self.sdl_pad:
@@ -81,7 +90,7 @@ class InputPad(ConfigBlock):
 
     def process_source_end(self, delta_time: float = 0):
         if self.sdl_pad:
-            for slot in self.input_slots():
+            for slot in self._input_slots:
                 slot_input = self._input_vals.get(slot)
                 match slot:
                     case "RUMBLE":
@@ -192,28 +201,6 @@ class InputPad(ConfigBlock):
                 pad_id_list.remove(new_pad_id)
         return self.sdl_id
 
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        slots = []
-        for sdl_button_enum in SDLButtonSource:
-            slots.append(sdl_button_enum.name)
-        for sdl_axis_enum in SingleAxisSource:
-            slots.append(sdl_axis_enum.name)
-        for sdl_double_axis_enum in DoubleAxisSource:
-            slots.append(sdl_double_axis_enum.name)
-        slots.append("GYRO")
-        slots.append("TOUCHPAD_PRESS")
-        slots.append("PADS")
-        return slots
-
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return ["RUMBLE"]
-
-    @classmethod
-    def config_slots(cls) -> typing.List[str]:
-        return ["controller_name", "multi_pad_mode"]
-
     def pre_init(self, *args, **kwargs):
         self.controller_name = ".*"
         self.multi_pad_mode = "duplicate"
@@ -243,37 +230,32 @@ XBOX_BUTTON_MAP = {
 class XboxPad(ConfigBlock):
     vpad: vg.VX360Gamepad | None = None
 
-    @classmethod
-    def input_slots(cls) -> typing.List[str]:
-        return [
-            "A",
-            "B",
-            "X",
-            "Y",
-            "DOWN",
-            "LEFT",
-            "RIGHT",
-            "UP",
-            "LSTICK",
-            "RSTICK",
-            "L1",
-            "L2",
-            "L3",
-            "R1",
-            "R2",
-            "R3",
-            "START",
-            "BACK",
-            "GUIDE",
-        ]
-
-    @classmethod
-    def output_slots(cls) -> typing.List[str]:
-        return ["RUMBLE"]
+    _input_slots = (
+        "A",
+        "B",
+        "X",
+        "Y",
+        "DOWN",
+        "LEFT",
+        "RIGHT",
+        "UP",
+        "LSTICK",
+        "RSTICK",
+        "L1",
+        "L2",
+        "L3",
+        "R1",
+        "R2",
+        "R3",
+        "START",
+        "BACK",
+        "GUIDE",
+    )
+    _output_slots = ("RUMBLE",)
 
     def process(self, delta_time: float = 0):
         if self.vpad:
-            for slot in self.input_slots():
+            for slot in self._input_slots:
                 slot_input = self[slot]
                 value = slot_input.value if slot_input else None
                 match slot:

@@ -429,6 +429,20 @@ def appmain(*args, **kwargs):
     PyroGyroMapper.init_sdl()
     PyroGyroMapper.instance().run()
 
+def profile():
+    import cProfile
+    import pstats
+    from pyrogyro.constants import ROOT_DIR
+    logging.basicConfig(
+        level=LOG_LEVEL, format=LOG_FORMAT_DEBUG if DEBUG else LOG_FORMAT
+    )
+    PyroGyroMapper.init_sdl()
+    with cProfile.Profile() as pr:
+        PyroGyroMapper.instance().run()
+        stats = pstats.Stats(pr)
+        stats.sort_stats(pstats.SortKey.TIME)
+        stats.print_stats(0.1)
+        stats.dump_stats(ROOT_DIR/"pyrogyro.prof")
 
 if __name__ == "__main__":
     appmain(sys.argv)

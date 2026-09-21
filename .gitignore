@@ -7,3 +7,4 @@ configs/testing/*
 bin/sdl3
 res/web/static/assets/*
 res/web/templates/*
+pyrogyro.prof

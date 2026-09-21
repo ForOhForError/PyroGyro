@@ -13,12 +13,12 @@ jobs:
         shell: pwsh
         run: md -Force "signingtools"
       - name: Install signtool
-        shell: pwsh -File {0}
-        run: |
-          if (! (winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force)) { \
-            Get-Childitem C:\Users\runneradmin\AppData\Local\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir\ | Get-Content \
-            Throw "Signtool install failed, see above log(s)"
-          }
+        shell: pwsh
+        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force))
+      - name: Display winget logs
+        if: always()
+        shell: pwsh
+        run: Get-Childitem C:\Users\runneradmin\AppData\Local\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir\ | Get-Content
       - name: Add signtool to github path
         shell: pwsh
         run: (Get-ChildItem "signingtools\signtool.*").Directory[0].FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8

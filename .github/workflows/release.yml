@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Install signtool
         shell: pwsh
-        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements
+        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity
       - name: Add signtool to github path
         shell: pwsh
         run: (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe").Directory[0].FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8

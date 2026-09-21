@@ -25,7 +25,7 @@ class Mouse(ConfigBlock):
     mouse_set_vec = Vec2()
     
     def process(self, delta_time: float = 0):
-        x, y = move_mouse(self.mouse_move_vec.x, self.mouse_move_vec.x)
+        x, y = move_mouse(self.mouse_move_vec.x, self.mouse_move_vec.y)
         self.mouse_move_vec.set_value(x, y)
 
     @classmethod

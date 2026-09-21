@@ -14,7 +14,7 @@ jobs:
         run: md -Force "signingtools"
       - name: Install .NET Framework
         shell: pwsh
-        run: Install-WindowsFeature Net-Framework-Core
+        run: winget install Microsoft.DotNet.Framework.DeveloperPack_4 --accept-source-agreements --accept-package-agreements --disable-interactivity
       - name: Install signtool
         shell: pwsh
         run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force

@@ -6,7 +6,7 @@ import sdl3
 import vgamepad as vg
 
 from pyrogyro.constants import DEFAULT_POLL_RATE
-from pyrogyro.gamepad_motion import GyroCalibration, sensor_fusion_gravity
+from pyrogyro.gamepad_motion import GyroCalibration, sensor_fusion_gravity, GyroData
 from pyrogyro.io_types import *
 from pyrogyro.math import *
 
@@ -25,6 +25,7 @@ class InputPad(ConfigBlock):
     gravity = Vec3()
     gyro_vec = Vec3()
     accel_vec = Vec3()
+    gyro_data = GyroData(Vec3(),Vec3())
     delta_time = 0.0
     gyro_update = False
 
@@ -60,36 +61,35 @@ class InputPad(ConfigBlock):
                     self.logger.info("Accel Sensor Detected")
                     sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True)
 
-    def process(self, time_now: float = 0):
+    def process(self, delta_time: float = 0):
         if self.gyro_update:
             delta_max = 5 / DEFAULT_POLL_RATE
-            if not self.last_timestamp:
-                self.last_timestamp = time_now
-            delta_time = time_now - self.last_timestamp
-            self.last_timestamp = time_now
             if delta_time > delta_max:
                 self.logger.debug(f"got delayed update clocking at {delta_time}")
                 delta_time = 0
             self.gyro_vec = self.gyro_calibration.calibrated(self.gyro_vec)
             adjusted_delta = delta_time if delta_time <= delta_max else 0
-            post_fusion_gyro = sensor_fusion_gravity(
+            self.gravity = sensor_fusion_gravity(
                 self.gravity, self.gyro_vec, self.accel_vec, adjusted_delta
             )
-            # self.logger.info(f"GYRO: {post_fusion_gyro}")
+            self.gyro_data.gyro.set(self.gyro_vec)
+            self.gyro_data.gravity_normal.set(self.gravity)
+            self.set_output_val("GYRO", self.gyro_data)
         self.gyro_vec.set_value(0, 0, 0)
         self.accel_vec.set_value(0, 0, 0)
         self.gyro_update = False
 
-    def process_source_end(self, time_now: float = 0):
+    def process_source_end(self, delta_time: float = 0):
         if self.sdl_pad:
             for slot in self.input_slots():
-                value = self[slot]
+                slot_input = self._input_vals.get(slot)
                 match slot:
                     case "RUMBLE":
-                        vec = to_vec2(value)
-                        sdl3.SDL_RumbleGamepad(
-                            self.sdl_pad, int(abs(vec.x)), int(abs(vec.y)), 1000
-                        )
+                        if slot_input:
+                            vec = to_vec2(slot_input.value)
+                            sdl3.SDL_RumbleGamepad(
+                                self.sdl_pad, int(abs(vec.x)), int(abs(vec.y)), 1000
+                            )
 
     def set_gyro_calibrating(self, calibrating: bool):
         self.gyro_calibrating = calibrating
@@ -271,7 +271,7 @@ class XboxPad(ConfigBlock):
     def output_slots(cls) -> typing.List[str]:
         return ["RUMBLE"]
 
-    def process(self, time_now: float = 0):
+    def process(self, delta_time: float = 0):
         if self.vpad:
             for slot in self.input_slots():
                 slot_input = self[slot]
@@ -323,7 +323,7 @@ class XboxPad(ConfigBlock):
         low_frequency_rumble = int(large_motor / 255 * 0xFFFF)
         high_frequency_rumble = int(small_motor / 255 * 0xFFFF)
 
-        vec = self @ "RUMBLE"
+        vec = self._input_vals.get("RUMBLE")
         if not isinstance(vec, Vec2):
             vec = Vec2()
         vec.x, vec.y = low_frequency_rumble, high_frequency_rumble

@@ -66,13 +66,12 @@ class Config:
             if issubclass(type_check, type(block))
         ]
 
-    def process(self):
-        time_now = time.time()
+    def process(self, delta_time:float=0.0):
         sources = set()
         for block in self.get_resolution_order():
             if block.is_source():
                 sources.add(block)
-            block.process(time_now=time_now)
+            block.process(delta_time=delta_time)
             for slot in block.output_slots():
                 if block[slot]:
                     output_value = block @ slot
@@ -81,7 +80,7 @@ class Config:
                         if dest:
                             dest[dest_slot] = output_value
         for block in sources:
-            block.process_source_end(time_now=time_now)
+            block.process_source_end(delta_time=delta_time)
 
     def get_resolution_order(self) -> list["ConfigBlock"]:
         order = []
@@ -152,7 +151,7 @@ class ConfigBlock:
     def on_update(self, slot: str, slot_input: InputValue):
         pass
 
-    def process(self, time_now: float = 0):
+    def process(self, delta_time: float = 0):
         pass
 
     def __matmul__(self, slot):
@@ -167,7 +166,7 @@ class ConfigBlock:
         else:
             raise KeyError(f"No output slot {slot}")
 
-    def process_source_end(self, time_now: float = 0):
+    def process_source_end(self, delta_time: float = 0):
         pass
 
     def on_load(self):
@@ -321,7 +320,7 @@ class Multiplier(ConfigBlock):
     def config_slots(cls) -> typing.List[str]:
         return ["factor"]
 
-    def process(self, time_now: float = 0):
+    def process(self, delta_time: float = 0):
         try:
             val = self.IN
             val = val * self.factor

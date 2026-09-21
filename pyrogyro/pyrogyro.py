@@ -351,8 +351,11 @@ class PyroGyroMapper:
             self.active_config.do_load_unload()
 
     def input_poll(self):
+        last_time = time.time_ns()
         while self.running:
             start_time = time.time_ns()
+            delta_time = (start_time - last_time) / 1000000000
+            last_time = start_time
             ns_per_poll = int(1000000000 / self.poll_rate)
             populate_pads = False
             event = sdl3.SDL_Event()
@@ -381,7 +384,7 @@ class PyroGyroMapper:
             if self.systray:
                 self.systray.update()
             if self.active_config:
-                self.active_config.process()
+                self.active_config.process(delta_time=delta_time)
             # for pypad in self.pyropads.values():
             #     pypad.update(time.time())
             poll_ns = time.time_ns() - start_time

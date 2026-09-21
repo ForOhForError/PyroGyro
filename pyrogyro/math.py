@@ -96,6 +96,9 @@ class Vec3:
 
     def set_value(self, x: float, y: float, z: float):
         self.x, self.y, self.z = x, y, z
+    
+    def set(self, other):
+        self.x, self.y, self.z = other.x, other.y, other.z
 
     def is_zero_vector(self):
         return self.x == 0 and self.y == 0 and self.z == 0

@@ -4,14 +4,14 @@
 # Thanks JibbSmart! :)
 
 import enum
+import logging
 import math
 import typing
 from dataclasses import dataclass, field
 from queue import deque
 
-from pyrogyro.io_types import enum_or_by_name
 from pyrogyro.math import *
-
+from pyrogyro.config_blocks import ConfigBlock
 
 @dataclass
 class GyroCalibration:
@@ -159,29 +159,48 @@ class GyroMode(enum.Enum):
     PLAYER_TURN = "PLAYER_TURN"
     PLAYER_LEAN = "PLAYER_LEAN"
 
-
 @dataclass
-class GyroConfig:
-    mode: enum_or_by_name(GyroMode) = GyroMode.OFF
+class GyroData:
+    gyro: Vec3
+    gravity_normal: Vec3
+
+class GyroConfig(ConfigBlock):
+    mode: GyroMode = GyroMode.OFF
     sens: float | typing.Tuple[float, float] = 1.0
     fast_sens: typing.Optional[float | typing.Tuple[float, float]] = None
     slow_threshold: float = 0.0
     fast_threshold: float = 0.0
+    real_world_calibration: float = 1.0
+    in_game_sens: float = 1.0
     smooth_window: typing.Optional[int] = None
     smooth_threshold: typing.Optional[float] = None
     tightening_theshold: typing.Optional[float] = None
+    smooth_buffer = deque()
 
-    def __post_init__(self):
-        self._smooth_buffer = deque()
+    @classmethod
+    def input_slots(cls) -> typing.List[str]:
+        return ["GYRO", "GYRO_ON", "GYRO_OFF"]
+    
+    @classmethod
+    def output_slots(cls) -> typing.List[str]:
+        return ["MOUSE"]
+    
+    @classmethod
+    def config_slots(cls) -> typing.List[str]:
+        return ["real_world_calibration","in_game_sens","mode","sens","fast_sens","slow_threshold","fast_threshold","smooth_window","smooth_threshold","tightening_theshold"]
+
+    def post_init(self, *args, **kwargs):
+        if isinstance(self.mode,str):
+            self.mode = GyroMode[self.mode]
 
     def get_smoothed_gyro(self, sample: Vec2):
-        self._smooth_buffer.append(sample)
-        if len(self._smooth_buffer) > (self.smooth_window if self.smooth_window else 0):
-            self._smooth_buffer.popleft()
+        self.smooth_buffer.append(sample)
+        if len(self.smooth_buffer) > (self.smooth_window if self.smooth_window else 0):
+            self.smooth_buffer.popleft()
         smoothed = Vec2()
-        for entry in self._smooth_buffer:
+        for entry in self.smooth_buffer:
             smoothed += entry
-        smoothed /= len(self._smooth_buffer)
+        smoothed /= len(self.smooth_buffer)
         return smoothed
 
     def get_tiered_smoothed_gyro(
@@ -297,3 +316,19 @@ class GyroConfig:
         camera_vec *= mouse_calib
         camera_vec *= -1
         return camera_vec
+    
+    def process(self, delta_time:float=0):
+        slot_input = self._input_vals.get("GYRO")
+        if slot_input:
+            if isinstance(slot_input.value, GyroData):
+                gyro_data:GyroData = slot_input.value
+                gyro_pixels = self.gyro_pixels(
+                    gyro_data.gyro,
+                    gyro_data.gravity_normal,
+                    delta_time,
+                    self.real_world_calibration,
+                    self.in_game_sens
+                )
+                self.set_output_val("MOUSE",gyro_pixels)
+
+ConfigBlock.register_block_class("GYRO_TO_MOUSE", GyroConfig)

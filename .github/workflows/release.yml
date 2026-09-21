@@ -14,7 +14,7 @@ jobs:
         run: md -Force "signingtools"
       - name: Install signtool
         shell: pwsh
-        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force))
+        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force
       - name: Display winget logs
         if: always()
         shell: pwsh

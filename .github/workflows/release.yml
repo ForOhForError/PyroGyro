@@ -9,22 +9,12 @@ jobs:
     runs-on: windows-2025
     environment: Build Settings
     steps:
-      - name: Create Signtool Directory
-        shell: pwsh
-        run: md -Force "signingtools"
-      - name: Install .NET Framework
-        shell: pwsh
-        run: winget install Microsoft.DotNet.Framework.DeveloperPack_4 --accept-source-agreements --accept-package-agreements --disable-interactivity
       - name: Install signtool
         shell: pwsh
-        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force
-      - name: Display winget logs
-        if: always()
-        shell: pwsh
-        run: Get-Childitem C:\Users\runneradmin\AppData\Local\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir\ | Get-Content
-      - name: Add signtool to github path
-        shell: pwsh
-        run: (Get-ChildItem "signingtools\signtool.*").Directory[0].FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
+        run: choco install windows-sdk-10.0
+      # - name: Add signtool to github path
+      #   shell: pwsh
+      #   run: (Get-ChildItem "signingtools\signtool.*").Directory[0].FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
       - name: Make fake registry key for vigem bus
         shell: pwsh
         run: New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ViGEMBus'

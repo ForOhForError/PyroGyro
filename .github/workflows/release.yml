@@ -9,12 +9,15 @@ jobs:
     runs-on: windows-2025
     environment: Build Settings
     steps:
+      - name: Create Signtool Directory
+        shell: pwsh
+        run: mkdir "signingtools"
       - name: Install signtool
         shell: pwsh
-        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity
+        run: winget install -e --id Microsoft.Azure.TrustedSigningClientTools --accept-source-agreements --accept-package-agreements --disable-interactivity --location "signingtools" --force
       - name: Add signtool to github path
         shell: pwsh
-        run: (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe").Directory[0].FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
+        run: (Get-ChildItem "signingtools\signtool.*").Directory[0].FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
       - name: Make fake registry key for vigem bus
         shell: pwsh
         run: New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ViGEMBus'

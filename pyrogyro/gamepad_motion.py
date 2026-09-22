@@ -51,6 +51,62 @@ def sensor_fusion_gravity(
     gravity += (newGravity - gravity) * nudge_value
     return gravity
 
+SMOOTHING_HALF_TIME = 0.25
+SHAKINESS_MAX_THRESHOLD = 0.4
+SHAKINESS_MIN_THRESHOLD = 0.01
+CORRECTION_STILL_RATE = 1
+CORRECTION_SHAKY_RATE = 0.1
+CORRECTION_GYRO_FACTOR = 0.1
+CORRECTION_GYRO_MIN_THRESHOLD = 0.05
+CORRECTION_GYRO_MAX_THRESHOLD = 0.25
+CORRECTION_MIN_SPEED = 0.01
+
+def sensor_fusion_gravity_fancy(
+    gravity: Vec3, smooth_accel: Vec3, shakiness: float, gyro: Vec3, accel: Vec3, delta_seconds: float, nudge_value=0.02
+):
+    # convert gyro input to reverse rotation
+    reverse_rotation = Quat.angle_axis(gyro.length() * delta_seconds, -gyro.x, -gyro.y, -gyro.z)
+    #rotate gravity vector
+    gravity.mul(reverse_rotation)
+    smooth_accel.mul(reverse_rotation)
+    smooth_interpolator = 2**(-delta_seconds/SMOOTHING_HALF_TIME)
+    shakiness *= smooth_interpolator
+    shakiness = max(shakiness, (accel-smooth_accel).length())
+    smooth_accel = lerp(accel, smooth_accel, smooth_interpolator)
+
+    gravity_delta = (accel*-1) - gravity
+    gravity_delta_direction = gravity_delta.normalized()
+    
+    if SHAKINESS_MAX_THRESHOLD > SHAKINESS_MIN_THRESHOLD:
+        correction_rate = clamp((shakiness-SHAKINESS_MAX_THRESHOLD)/(SHAKINESS_MAX_THRESHOLD-SHAKINESS_MIN_THRESHOLD), 0, 1)
+    elif shakiness > SHAKINESS_MAX_THRESHOLD:
+        correction_rate = CORRECTION_SHAKY_RATE
+    else:
+        correction_rate = CORRECTION_STILL_RATE
+
+    # limit in proportion to rotation rate
+    angle_rate = gyro.length() * math.pi / 180
+    correction_limit = angle_rate * gravity.length() * CORRECTION_GYRO_FACTOR
+    if correction_rate > correction_limit:
+        if CORRECTION_GYRO_MAX_THRESHOLD > CORRECTION_GYRO_MIN_THRESHOLD:
+            close_enough_factor = clamp((gravity_delta.length()-CORRECTION_GYRO_MIN_THRESHOLD)/(CORRECTION_GYRO_MAX_THRESHOLD-CORRECTION_GYRO_MIN_THRESHOLD), 0, 1)
+        elif gravity_delta.length() > CORRECTION_GYRO_MIN_THRESHOLD:
+            close_enough_factor = 1
+        else:
+            close_enough_factor = 0
+        correction_rate = correction_rate + (correction_limit - correction_rate) * close_enough_factor
+
+    # finally, let's always allow a little bit of correction
+    correction_rate = max(correction_rate, CORRECTION_MIN_SPEED)
+
+    # apply correction
+    correction = gravity_delta_direction * (correction_rate * delta_seconds)
+    if correction.length()**2 < gravity_delta.length()**2:
+        gravity += correction
+    else:
+        gravity += gravity_delta
+    return gravity
+
 
 def gyro_camera_local(gyro: Vec3, delta_seconds: float, yaw_turn_axis: bool = True):
     if yaw_turn_axis:
@@ -323,4 +379,5 @@ class GyroConfig(ConfigBlock):
                 )
                 self.set_output_val("MOUSE",gyro_pixels)
 
-ConfigBlock.register_block_class("GYRO_TO_MOUSE", GyroConfig)
+def register_blocks():
+    ConfigBlock.register_block_class("GYRO_TO_MOUSE", GyroConfig)

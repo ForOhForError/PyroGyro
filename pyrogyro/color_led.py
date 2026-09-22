@@ -4,15 +4,21 @@ import enum
 import typing
 from dataclasses import dataclass, field
 
-HSV_ROYGBIV = (
+from pyrogyro.config_blocks import ConfigBlock
+
+HSV_ROYGBIV = [
     Vec3(x=0, y=1, z=1),
     Vec3(x=1, y=1, z=1),
-)
+]
 
-RGB_PYRO_GYRO = (
+RGB_PYRO_GYRO = [
     Vec3(x=55 / 255.0, y=113 / 255.0, z=163 / 255.0),
     Vec3(x=255 / 255.0, y=209 / 255.0, z=65 / 255.0),
-)
+]
+
+class ColorScheme(enum.Enum):
+    RAINBOW = HSV_ROYGBIV
+
 
 
 class ColorSpace(enum.Enum):
@@ -29,48 +35,46 @@ class ColorSpace(enum.Enum):
         return in_color
 
 
-@dataclass
-class LerpableLED:
-    _current_color: Vec3 = field(default_factory=Vec3)
-    color_sequence: typing.Sequence[Vec3] = field(default_factory=list)
+
+class ColorSequence(ConfigBlock):
+    _output_slots = ("COLOR", )
+    _config_slots = ("color_sequence", "duration_per_color", "instant_loop", "color_space")
+    color_sequence: list = []
     index_start: int = 0
     index_end: int = 0
     start_ts: typing.Optional[int] = None
     duration_per_color: float = 1
     color_space: ColorSpace = ColorSpace.RGB
     instant_loop: bool = False
-
-    def set_sequence(
-        self,
-        color_sequence: typing.Sequence[Vec3],
-        color_space=ColorSpace.RGB,
-        duration_per_color=1,
-        instant_loop=False,
-    ):
-        self.instant_loop = instant_loop
-        self.color_sequence = color_sequence
-        self.color_space = color_space
+    current_color: Vec3 = Vec3()
+    
+    def post_init(self, *args, **kwargs):
+        if isinstance(self.color_space, str):
+            self.color_space = ColorSpace[self.color_space]
+        
+        if isinstance(self.color_sequence, str):
+            self.color_sequence = ColorScheme[self.color_sequence].value
+        
         self.index_start = 0
-        self.duration_per_color = duration_per_color
         if len(self.color_sequence) > 1:
             self.index_end = 1
         else:
             self.index_end = 0
-        return self
 
-    def update(self, timestamp):
-        if self.start_ts == None:
-            self.start_ts = timestamp
-        time_delta = timestamp - self.start_ts
+    @classmethod
+    def is_source(cls) -> bool:
+        return True
+
+    def process(self, delta_time: float = 0):
         if self.duration_per_color == 0:
             delta = 0
         else:
-            delta = time_delta / self.duration_per_color
+            delta = delta_time / self.duration_per_color
         start, end = (
             self.color_sequence[self.index_start],
             self.color_sequence[self.index_end],
         )
-        self._current_color.set_lerp(start, end, delta)
+        self.current_color.set_lerp(start, end, delta)
         if delta >= 1.0:
             self.index_start = self.index_start + 1
             self.index_end = self.index_end + 1
@@ -81,16 +85,10 @@ class LerpableLED:
             else:
                 self.index_start = self.index_start % len_seq
                 self.index_end = self.index_end % len_seq
-            self.start_ts = timestamp
+        self.set_output_val("COLOR", self.get_rgb_color())
 
     def get_rgb_color(self):
-        return self.color_space.to_rgb(self._current_color)
+        return self.color_space.to_rgb(self.current_color)
 
-
-def get_default_led():
-    return LerpableLED().set_sequence(
-        HSV_ROYGBIV,
-        color_space=ColorSpace.HSV,
-        duration_per_color=10,
-        instant_loop=False,
-    )
+def register_blocks():
+    ConfigBlock.register_block_class("COLOR_SEQUENCE", ColorSequence)

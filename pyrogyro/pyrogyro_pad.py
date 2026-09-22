@@ -35,7 +35,7 @@ class InputPad(ConfigBlock):
         tuple(sdl_double_axis_enum.name for sdl_double_axis_enum in DoubleAxisSource) +
         ("GYRO", "TOUCHPAD_PRESS", "PADS")
     )
-    _input_slots = ("RUMBLE",)
+    _input_slots = ("RUMBLE", "LED",)
     _config_slots = ("controller_name", "multi_pad_mode")
 
     def __del__(self):
@@ -99,6 +99,15 @@ class InputPad(ConfigBlock):
                             sdl3.SDL_RumbleGamepad(
                                 self.sdl_pad, int(abs(vec.x)), int(abs(vec.y)), 1000
                             )
+                    case "LED":
+                        if slot_input:
+                            color = to_vec3(slot_input.value)
+                            color_r, color_g, color_b = (
+                                int(color.x * 255),
+                                int(color.y * 255),
+                                int(color.z * 255),
+                            )
+                            sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)
 
     def set_gyro_calibrating(self, calibrating: bool):
         self.gyro_calibrating = calibrating

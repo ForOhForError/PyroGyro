@@ -1,37 +1,11 @@
-import collections.abc
 import enum
-import logging
-import time
-import types
 import typing
 
 import sdl3
 from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
-from pydantic import BaseModel, BeforeValidator, PlainSerializer
-from vgamepad import DS4_BUTTONS, XUSB_BUTTON
 
 from pyrogyro.math import *
 from pyrogyro.platform_util import keyDown, keyUp, mouseDown, mouseUp, move_mouse
-
-EnumNameSerializer = PlainSerializer(
-    lambda e: e.name, return_type="str", when_used="always"
-)
-
-COMPLEX_TARGET_CLASSES: typing.List[type] = []
-
-
-def enum_or_by_name(T):
-    def constructed_by_object_or_name(v: str | T) -> T:
-        if isinstance(v, T):
-            return v
-        try:
-            return T[v]
-        except (KeyError, TypeError):
-            raise ValueError("invalid value")
-
-    return typing.Annotated[
-        T, EnumNameSerializer, BeforeValidator(constructed_by_object_or_name)
-    ]
 
 
 class Keynum(enum.Enum):
@@ -68,9 +42,9 @@ class MouseTarget(enum.Enum):
 
 
 class MouseButtonTarget(enum.Enum):
-    LMOUSE = PRIMARY
-    RMOUSE = SECONDARY
-    MMOUSE = MIDDLE
+    LEFT = PRIMARY
+    RIGHT = SECONDARY
+    MIDDLE = MIDDLE
 
     def release(self):
         mouseUp(button=self.value)
@@ -164,6 +138,11 @@ def to_vec2(in_val):
     else:
         return Vec2()
 
+def to_vec3(in_val):
+    if isinstance(in_val, Vec3):
+        return in_val
+    else:
+        return Vec3()
 
 def to_float(in_val):
     if isinstance(in_val, bool):

@@ -43,6 +43,6 @@ class Mouse(ConfigBlock):
         if slot not in MOUSE_POSITION_SLOTS:
             MouseButtonTarget[slot].release()
 
-
-ConfigBlock.register_block_class("KEYBOARD", Keyboard)
-ConfigBlock.register_block_class("MOUSE", Mouse)
+def register_blocks():
+    ConfigBlock.register_block_class("KEYBOARD", Keyboard)
+    ConfigBlock.register_block_class("MOUSE", Mouse)

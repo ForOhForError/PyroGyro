@@ -25,34 +25,8 @@ L1 = "xbox.L1"
 L2 = "xbox.L2"
 L3 = "xbox.L3"
 RSTICK = "xbox.RSTICK"
-LSTICK = ["xbox.LSTICK","rumble_mult.IN"]
-LP1 = "kb.F"
-GYRO = "aim.GYRO"
+LSTICK = "xbox.LSTICK"
 
 [ xbox ]
 TYPE = "XBOX"
 RUMBLE = "pad.RUMBLE"
-
-[ rumble_mult ]
-TYPE = "MULT"
-factor = 1.5
-OUT = "pad.RUMBLE"
-
-[ kb ]
-TYPE = "KEYBOARD"
-
-[ mouse ]
-TYPE = "MOUSE"
-
-[ aim ]
-TYPE = "GYRO_TO_MOUSE"
-MOUSE = "mouse.MOVE"
-mode = "LOCAL"
-real_world_calibration = 5.3333
-sens = 3
-fast_sens = [5, 4]
-slow_threshold = 5
-fast_threshold = 75
-smooth_window = 0
-smooth_threshold = 5
-tightening_theshold = 5

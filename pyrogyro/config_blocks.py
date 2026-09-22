@@ -26,6 +26,9 @@ class Config:
                 block = ConfigBlock.parse_from_dict(value)
                 self.blocks[key] = block
 
+    def __repr__(self) -> str:
+        return self.__str__()
+
     def __str__(self):
         return f"{type(self).__name__}({self.name}: {len(self.blocks)} blocks)"
 
@@ -46,7 +49,7 @@ class Config:
             return sum(
                 (
                     1 if val != ".*" else 0
-                    for val in (self.autoload_exe_name, self.autoload_exe_name)
+                    for val in (self.autoload_exe_name, self.autoload_window_name)
                 )
             )
         return 0

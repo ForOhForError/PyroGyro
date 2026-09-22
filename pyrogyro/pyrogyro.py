@@ -33,11 +33,19 @@ from pyrogyro.platform_util import (
     set_console_title,
     set_console_visibility,
 )
-import pyrogyro.kbm_blocks
 from pyrogyro.pyrogyro_pad import InputPad
 from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 import pyrogyro.overlay
+
+import pyrogyro.kbm_blocks
+import pyrogyro.gamepad_motion
+import pyrogyro.mode_blocks
+import pyrogyro.color_led
+pyrogyro.kbm_blocks.register_blocks()
+pyrogyro.gamepad_motion.register_blocks()
+pyrogyro.mode_blocks.register_blocks()
+pyrogyro.color_led.register_blocks()
 
 
 EVENT_TYPES_FILTER = set(
@@ -170,15 +178,17 @@ class PyroGyroMapper:
                     new_mapping = potential_mappings[0]
                 else:
                     potential_mappings.sort(key=Config.count_autoload_specificity)
+                    self.logger.info(f"Mappings: {potential_mappings}")
                     best_match = potential_mappings[-1]
-                    final_value = best_match.autoload.count_specificity()
+                    final_value = best_match.count_autoload_specificity()
                     remaining_mappings = len(
                         [
                             mapping
                             for mapping in potential_mappings
-                            if mapping.autoload.count_specificity() == final_value
+                            if mapping.count_autoload_specificity() == final_value
                         ]
                     )
+                    self.logger.info(f"remaining: {remaining_mappings}")
                     if remaining_mappings == 1:
                         new_mapping = best_match
             if new_mapping is not old_mapping:

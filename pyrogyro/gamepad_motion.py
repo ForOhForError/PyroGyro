@@ -8,10 +8,11 @@ import logging
 import math
 import typing
 from dataclasses import dataclass, field
+from pydantic import Field
 from queue import deque
 
 from pyrogyro.math import *
-from pyrogyro.config_blocks import ConfigBlock
+from pyrogyro.config_blocks import ENUM_BY_NAME, ConfigBlock, PyroGyroBaseModel
 
 @dataclass
 class GyroCalibration:
@@ -36,10 +37,27 @@ class GyroCalibration:
     def calibrated(self, uncalibrated_gyro):
         return uncalibrated_gyro - self.calibration_offset
 
+@dataclass
+class GyroData:
+    gyro: Vec3 = field(default_factory=Vec3)
+    accel: Vec3 = field(default_factory=Vec3)
+    smooth_accel: Vec3 = field(default_factory=Vec3)
+    gravity: Vec3 = field(default_factory=Vec3)
+    shakiness: float = 0
+    
+    def __add__(self, other:"GyroData"):
+        return GyroData(
+            gyro = self.gyro + other.gyro,
+            accel = self.accel + other.accel,
+            smooth_accel= self.accel + other.accel,
+            gravity = self.gravity + other.gravity,
+            shakiness = self.shakiness + other.shakiness
+        )
 
 def sensor_fusion_gravity(
-    gravity: Vec3, gyro: Vec3, accel: Vec3, delta_seconds: float, nudge_value=0.02
+    gyro_data:GyroData, delta_seconds: float, nudge_value=0.02
 ):
+    gyro, accel, gravity = gyro_data.gyro, gyro_data.accel, gyro_data.gravity
     # convert gyro input to reverse rotation
     rotation = Quat.angle_axis(gyro.length() * delta_seconds, -gyro.x, -gyro.y, -gyro.z)
 
@@ -62,24 +80,25 @@ CORRECTION_GYRO_MAX_THRESHOLD = 0.25
 CORRECTION_MIN_SPEED = 0.01
 
 def sensor_fusion_gravity_fancy(
-    gravity: Vec3, smooth_accel: Vec3, shakiness: float, gyro: Vec3, accel: Vec3, delta_seconds: float, nudge_value=0.02
+    gyro_data:GyroData, delta_seconds: float
 ):
+    gyro, accel, gravity = gyro_data.gyro, gyro_data.accel, gyro_data.gravity
     # convert gyro input to reverse rotation
     reverse_rotation = Quat.angle_axis(gyro.length() * delta_seconds, -gyro.x, -gyro.y, -gyro.z)
     #rotate gravity vector
     gravity.mul(reverse_rotation)
-    smooth_accel.mul(reverse_rotation)
+    gyro_data.smooth_accel.mul(reverse_rotation)
     smooth_interpolator = 2**(-delta_seconds/SMOOTHING_HALF_TIME)
-    shakiness *= smooth_interpolator
-    shakiness = max(shakiness, (accel-smooth_accel).length())
-    smooth_accel = lerp(accel, smooth_accel, smooth_interpolator)
+    gyro_data.shakiness *= smooth_interpolator
+    gyro_data.shakiness = max(gyro_data.shakiness, (accel-gyro_data.smooth_accel).length())
+    gyro_data.smooth_accel = lerp(accel, gyro_data.smooth_accel, smooth_interpolator)
 
     gravity_delta = (accel*-1) - gravity
     gravity_delta_direction = gravity_delta.normalized()
     
     if SHAKINESS_MAX_THRESHOLD > SHAKINESS_MIN_THRESHOLD:
-        correction_rate = clamp((shakiness-SHAKINESS_MAX_THRESHOLD)/(SHAKINESS_MAX_THRESHOLD-SHAKINESS_MIN_THRESHOLD), 0, 1)
-    elif shakiness > SHAKINESS_MAX_THRESHOLD:
+        correction_rate = clamp((gyro_data.shakiness-SHAKINESS_MAX_THRESHOLD)/(SHAKINESS_MAX_THRESHOLD-SHAKINESS_MIN_THRESHOLD), 0, 1)
+    elif gyro_data.shakiness > SHAKINESS_MAX_THRESHOLD:
         correction_rate = CORRECTION_SHAKY_RATE
     else:
         correction_rate = CORRECTION_STILL_RATE
@@ -105,8 +124,6 @@ def sensor_fusion_gravity_fancy(
         gravity += correction
     else:
         gravity += gravity_delta
-    return gravity
-
 
 def gyro_camera_local(gyro: Vec3, delta_seconds: float, yaw_turn_axis: bool = True):
     if yaw_turn_axis:
@@ -215,35 +232,32 @@ class GyroMode(enum.Enum):
     PLAYER_TURN = "PLAYER_TURN"
     PLAYER_LEAN = "PLAYER_LEAN"
 
-@dataclass
-class GyroData:
-    gyro: Vec3
-    gravity_normal: Vec3
-
-class GyroConfig(ConfigBlock):
-    mode: GyroMode = GyroMode.OFF
-    sens: float | typing.Tuple[float, float] = 1.0
-    fast_sens: typing.Optional[float | typing.Tuple[float, float]] = None
-    slow_threshold: float = 0.0
-    fast_threshold: float = 0.0
-    real_world_calibration: float = 1.0
-    in_game_sens: float = 1.0
-    smooth_window: typing.Optional[int] = None
-    smooth_threshold: typing.Optional[float] = None
-    tightening_theshold: typing.Optional[float] = None
+class GyroToMouse(ConfigBlock):
     smooth_buffer = deque()
     
-    _input_slots = ("GYRO", "GYRO_ON", "GYRO_OFF")
-    _output_slots = ("MOUSE",)
-    _config_slots = ("real_world_calibration","in_game_sens","mode","sens","fast_sens","slow_threshold","fast_threshold","smooth_window","smooth_threshold","tightening_theshold")
-
-    def post_init(self, *args, **kwargs):
-        if isinstance(self.mode,str):
-            self.mode = GyroMode[self.mode]
+    class Inputs(PyroGyroBaseModel):
+        GYRO: GyroData = Field(default_factory=GyroData)
+        GYRO_ON: float|bool = 0
+        GYRO_OFF: float|bool = 0
+    
+    class Outputs(PyroGyroBaseModel):
+        MOUSE: Vec2 = Field(default_factory=Vec2)
+    
+    class Config(PyroGyroBaseModel):
+        mode: ENUM_BY_NAME(GyroMode) = GyroMode.OFF
+        sens: float | typing.Tuple[float, float] = 1.0
+        fast_sens: typing.Optional[float | typing.Tuple[float, float]] = None
+        slow_threshold: float = 0.0
+        fast_threshold: float = 0.0
+        real_world_calibration: float = 1.0
+        in_game_sens: float = 1.0
+        smooth_window: typing.Optional[int] = None
+        smooth_threshold: typing.Optional[float] = None
+        tightening_theshold: typing.Optional[float] = None
 
     def get_smoothed_gyro(self, sample: Vec2):
         self.smooth_buffer.append(sample)
-        if len(self.smooth_buffer) > (self.smooth_window if self.smooth_window else 0):
+        if len(self.smooth_buffer) > (self.config.smooth_window if self.config.smooth_window else 0):
             self.smooth_buffer.popleft()
         smoothed = Vec2()
         for entry in self.smooth_buffer:
@@ -280,17 +294,17 @@ class GyroConfig(ConfigBlock):
         return sample
 
     def get_slow_sens(self):
-        if isinstance(self.sens, (float, int)):
-            return self.sens, self.sens
+        if isinstance(self.config.sens, (float, int)):
+            return self.config.sens, self.config.sens
         else:
-            return self.sens
+            return self.config.sens
 
     def get_fast_sens(self):
-        if self.fast_sens:
-            if isinstance(self.fast_sens, (float, int)):
-                return self.fast_sens, self.fast_sens
+        if self.config.fast_sens:
+            if isinstance(self.config.fast_sens, (float, int)):
+                return self.config.fast_sens, self.config.fast_sens
             else:
-                return self.fast_sens
+                return self.config.fast_sens
         else:
             return self.get_slow_sens()
 
@@ -311,7 +325,7 @@ class GyroConfig(ConfigBlock):
         )
 
     def gyro_camera(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
-        match self.mode:
+        match self.config.mode:
             case GyroMode.OFF:
                 calibrated_gyro = Vec2(0, 0)
             case GyroMode.LOCAL:
@@ -330,21 +344,21 @@ class GyroConfig(ConfigBlock):
                 )
             case _:
                 calibrated_gyro = Vec2(0, 0)
-        if self.smooth_window:
-            if self.smooth_threshold:
+        if self.config.smooth_window:
+            if self.config.smooth_threshold:
                 calibrated_gyro = self.get_tiered_smoothed_gyro(
-                    calibrated_gyro, self.smooth_threshold, delta_seconds
+                    calibrated_gyro, self.config.smooth_threshold, delta_seconds
                 )
             else:
                 calibrated_gyro = self.get_smoothed_gyro(calibrated_gyro)
 
-        if self.tightening_theshold:
+        if self.config.tightening_theshold:
             calibrated_gyro = self.get_tightened_sample(
-                calibrated_gyro, self.tightening_theshold, delta_seconds
+                calibrated_gyro, self.config.tightening_theshold, delta_seconds
             )
 
         gyro_sens_x, gyro_sens_y = self.get_accel_sens(
-            calibrated_gyro, self.slow_threshold, self.fast_threshold, delta_seconds
+            calibrated_gyro, self.config.slow_threshold, self.config.fast_threshold, delta_seconds
         )
         calibrated_gyro.x *= gyro_sens_x
         calibrated_gyro.y *= gyro_sens_y
@@ -366,18 +380,17 @@ class GyroConfig(ConfigBlock):
         return camera_vec
     
     def process(self, delta_time:float=0):
-        slot_input = self._input_vals.get("GYRO")
-        if slot_input:
-            if isinstance(slot_input.value, GyroData):
-                gyro_data:GyroData = slot_input.value
-                gyro_pixels = self.gyro_pixels(
-                    gyro_data.gyro,
-                    gyro_data.gravity_normal,
-                    delta_time,
-                    self.real_world_calibration,
-                    self.in_game_sens
-                )
-                self.set_output_val("MOUSE",gyro_pixels)
+        slot_input = self.inputs.GYRO
+        if isinstance(slot_input, GyroData):
+            gyro_data:GyroData = slot_input
+            gyro_pixels = self.gyro_pixels(
+                gyro_data.gyro,
+                gyro_data.gravity,
+                delta_time,
+                self.config.real_world_calibration,
+                self.config.in_game_sens
+            )
+            self.outputs.MOUSE = gyro_pixels
 
 def register_blocks():
-    ConfigBlock.register_block_class("GYRO_TO_MOUSE", GyroConfig)
+    ConfigBlock.register_block_class("GYRO_TO_MOUSE", GyroToMouse)

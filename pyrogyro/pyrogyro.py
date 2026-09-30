@@ -27,7 +27,7 @@ from pyrogyro.constants import (
     resource_location,
 )
 from pyrogyro.math import *
-from pyrogyro.config_blocks import Config
+from pyrogyro.config_blocks import PyroGyroConfig
 from pyrogyro.platform_util import (
     init_window_listener,
     set_console_title,
@@ -106,7 +106,7 @@ class PyroGyroMapper:
         self.overlay = pyrogyro.overlay.Overlay()
         self.config_lock = threading.Lock()
 
-        self.active_config: Config | None = None
+        self.active_config: PyroGyroConfig | None = None
         self.pad_map: dict[sdl3.SDL_JoystickID, InputPad] = {}
         self.autoload_configs = {}
         self.sdl_joysticks = {}
@@ -130,7 +130,7 @@ class PyroGyroMapper:
             ):
                 with open(config_path, "rb") as config_handle:
                     try:
-                        config: Config = Config.load_from_file(
+                        config: PyroGyroConfig = PyroGyroConfig.load_from_file(
                             file_handle=config_handle
                         )
                         if config.autoload:
@@ -164,7 +164,7 @@ class PyroGyroMapper:
             potential_mappings = []
             old_mapping = self.active_config
             new_mapping = None
-            mapping: Config
+            mapping: PyroGyroConfig
             for mapping in configs_to_check:
                 if all(
                     (
@@ -177,8 +177,7 @@ class PyroGyroMapper:
                 if len(potential_mappings) == 1:
                     new_mapping = potential_mappings[0]
                 else:
-                    potential_mappings.sort(key=Config.count_autoload_specificity)
-                    self.logger.info(f"Mappings: {potential_mappings}")
+                    potential_mappings.sort(key=PyroGyroConfig.count_autoload_specificity)
                     best_match = potential_mappings[-1]
                     final_value = best_match.count_autoload_specificity()
                     remaining_mappings = len(
@@ -188,13 +187,14 @@ class PyroGyroMapper:
                             if mapping.count_autoload_specificity() == final_value
                         ]
                     )
-                    self.logger.info(f"remaining: {remaining_mappings}")
                     if remaining_mappings == 1:
                         new_mapping = best_match
             if new_mapping is not old_mapping:
                 self.active_config = new_mapping
                 if self.active_config:
                     self.logger.info(f"Switched to config {self.active_config.name}")
+                    self.active_config.do_load_unload()
+                    self.active_config.print_config()
                 else:
                     self.logger.info(f"Deactivated all configs.")
 
@@ -369,8 +369,8 @@ class PyroGyroMapper:
             ns_per_poll = int(1000000000 / self.poll_rate)
             populate_pads = False
             event = sdl3.SDL_Event()
-            # for pypad in self.pyropads.values():
-            #     pypad.on_poll_start()
+            for pypad in self.pad_map.values():
+                pypad.poll_start()
             while sdl3.SDL_PollEvent(event):  # type: ignore
                 match event.type:  # type: ignore
                     case evt_type if evt_type in EVENT_TYPES_PASS_TO_PAD:
@@ -395,8 +395,6 @@ class PyroGyroMapper:
                 self.systray.update()
             if self.active_config:
                 self.active_config.process(delta_time=delta_time)
-            # for pypad in self.pyropads.values():
-            #     pypad.update(time.time())
             poll_ns = time.time_ns() - start_time
             sdl3.SDL_DelayNS(ns_per_poll - poll_ns)  # type: ignore
 

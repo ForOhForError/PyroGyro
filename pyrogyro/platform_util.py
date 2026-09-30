@@ -42,7 +42,7 @@ match SYSTEM:
         ):
             vel_x = x + extra_x
             vel_y = y + extra_y
-            _movemouse(int(vel_x), int(vel_y), relative=True)
+            _movemouse(int(vel_x), int(vel_y), relative=True, _pause=False)
             leftover_x = vel_x % sign(vel_x)
             leftover_y = vel_y % sign(vel_y)
             return leftover_x, leftover_y
@@ -53,6 +53,10 @@ match SYSTEM:
         def set_console_visibility(visibility: bool):
             hWnd = kernel32.GetConsoleWindow()
             user32.ShowWindow(hWnd, 1 if visibility else 0)
+
+        def is_minimized() -> bool:
+            hWnd = kernel32.GetConsoleWindow()
+            return bool(user32.IsIconic(hWnd))
 
         def init_window_listener(on_focus_change):  # type: ignore
             window_listener = WindowChangeEventListener(callback=on_focus_change)
@@ -115,7 +119,7 @@ match SYSTEM:
         ):
             vel_x = x + extra_x
             vel_y = y + extra_y
-            _movemouse(int(vel_x), int(vel_y))
+            _movemouse(int(vel_x), int(vel_y), _pause=False)
             leftover_x = vel_x % sign(vel_x)
             leftover_y = vel_y % sign(vel_y)
             return leftover_x, leftover_y
@@ -125,6 +129,9 @@ match SYSTEM:
 
         def set_console_visibility(visibility: bool):
             pass
+        
+        def is_minimized() -> bool:
+            return False
 
         def init_systray(
             icon_location, tray_title, menu_options, on_quit=None, **kwargs

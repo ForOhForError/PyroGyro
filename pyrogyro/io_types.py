@@ -93,8 +93,6 @@ class SingleAxisSource(enum.Enum):
     R2 = sdl3.SDL_GAMEPAD_AXIS_RIGHT_TRIGGER
 
     def write_vec(self, vec, value):
-        if not isinstance(vec, Vec2):
-            vec = Vec2()
         match self:
             case SingleAxisSource.LSTICK_X | SingleAxisSource.RSTICK_X:
                 vec.x = value
@@ -149,8 +147,9 @@ def to_float(in_val):
         return 1.0 if in_val else 0.0
     return float(in_val)
 
+FLOAT_TO_BOOL_THRESH = 0.01
 
 def to_bool(in_val):
     if isinstance(in_val, float):
-        return True if abs(in_val) >= 0.01 else False
+        return True if abs(in_val) >= FLOAT_TO_BOOL_THRESH else False
     return bool(in_val)

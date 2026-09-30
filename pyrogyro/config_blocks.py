@@ -1,20 +1,42 @@
 from dataclasses import dataclass
 import enum
-import re
-import time
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 import typing
 import logging
-import vgamepad as vg
 import tomlkit
 
-from functools import cache
+from pyrogyro.constants import DEBUG
+from pyrogyro.io_types import to_bool
+from pyrogyro.math import *
 
 CONFIG_LOGGER = logging.getLogger("Config")
 
+EnumNameSerializer = PlainSerializer(
+    lambda e: e.name, return_type="str", when_used="always"
+)
 
-class Config:
+def ENUM_BY_NAME(T):
+    def constructed_by_name(v: str | T) -> T:
+        try:
+            return T[v]
+        except (KeyError, TypeError):
+            raise ValueError(f"{v} is not a valid value of {T.__name__}")
+
+    return typing.Annotated[
+        T, EnumNameSerializer, BeforeValidator(constructed_by_name)
+    ]
+
+class PyroGyroBaseModel(BaseModel, validate_assignment=DEBUG):
+    def reset_io(self):
+        for field, field_info in type(self).model_fields.items():
+            setattr(self, field, field_info.get_default())
+        self.model_fields_set.clear()
+
+class NoData(PyroGyroBaseModel):
+    pass
+
+class PyroGyroConfig:
     def __init__(self, data):
         self.blocks: dict[str, ConfigBlock] = {}
         self.name = data.get("name", "PyroGyro Config")
@@ -32,12 +54,10 @@ class Config:
     def __str__(self):
         return f"{type(self).__name__}({self.name}: {len(self.blocks)} blocks)"
 
-    def get_value(self, block, slot):
-        b = self.blocks.get(block)
-        if b:
-            return b[slot]
-        else:
-            return None
+    def print_config(self):
+        for block_name, block in self.blocks.items():
+            logging.debug(f"[{block_name}]")
+            block.print_config()
 
     @classmethod
     def load_from_file(cls, file_handle):
@@ -69,19 +89,25 @@ class Config:
             if issubclass(type_check, type(block))
         ]
 
+    def reset(self):
+        for block in self.blocks.values():
+            block.reset_io()
+
     def process(self, delta_time:float=0.0):
         sources = set()
         for block in self.get_resolution_order():
             if block.is_source():
                 sources.add(block)
+            block.process_inputs()
             block.process(delta_time=delta_time)
-            for slot in block._output_slots:
-                if block[slot]:
-                    output_value = block @ slot
+            block.flip_inputs()
+            for slot in block.output_slots():
+                output_value = block.get_output(slot)
+                if output_value != None:
                     for dest_name, dest_slot in block.get_destinations(slot):
                         dest = self.blocks.get(dest_name)
                         if dest:
-                            dest[dest_slot] = output_value
+                            dest.set_input(dest_slot, output_value)
         for block in sources:
             block.process_source_end(delta_time=delta_time)
 
@@ -97,7 +123,7 @@ class Config:
 
         while len(visit) > 0:
             next = visit.pop()
-            for slot in next._output_slots:
+            for slot in next.output_slots():
                 for block_name, slot_name in next.get_destinations(slot):
                     block = self.blocks.get(block_name)
                     if block and (block not in done) and (block not in visit):
@@ -106,29 +132,89 @@ class Config:
             done.add(next)
         return order
 
-
-class InputState(enum.Enum):
-    UPDATE = 0
-    PRESSED = 1
-    RELEASED = 0
-
-
-@dataclass
-class InputValue:
-    value: typing.Any
-    state: InputState = InputState.UPDATE
-
-
 class ConfigBlock:
     class Register:
         BLOCK_TYPES: typing.Dict[str, type] = {}
 
-    _loaded = False
-    _input_slots = ()
-    _output_slots = ()
-    _config_slots = ()
-    _output_vals: dict[str, typing.Any] = {}
-    _input_vals: dict[str, InputValue] = {}
+    Inputs: type[PyroGyroBaseModel] = NoData
+    Outputs: type[PyroGyroBaseModel] = NoData
+    Config: type[PyroGyroBaseModel] = NoData
+    
+    def __init__(self, data: typing.Dict[str, typing.Any], *args, **kwargs):
+        self.pre_init(*args, **kwargs)
+        
+        self.config:self.Config = self.Config(**data)
+        self.inputs:self.Inputs = self.Inputs()
+        self.old_inputs:self.Inputs = self.Inputs()
+        self.outputs:self.Outputs = self.Outputs()
+        self._output_dests: dict[str, str|list[str]] = {}
+        self._loaded:bool = False
+        for key in data:
+            if key == "TYPE" or key in self.config_slots():
+                pass
+            elif key in self.output_slots():
+                try:
+                    self._output_dests[key] = data[key]
+                except ValueError:
+                    CONFIG_LOGGER.exception("Error setting slot")
+            else:
+                CONFIG_LOGGER.error(f"{type(self).__name__} has no slot {key}")
+        self.post_init(*args, **kwargs)
+        
+    def print_config(self):
+        for conf_slot in self.Config.model_fields:
+            logging.debug(f"{conf_slot} = {getattr(self.config,conf_slot)}")
+        for dest_source in self._output_dests:
+            logging.debug(f"{dest_source} -> {self._output_dests[dest_source]}")
+        
+    def reset_io(self):
+        self.old_inputs.reset_io()
+        self.inputs.reset_io()
+        self.outputs.reset_io()
+    
+    def flip_inputs(self):
+        self.inputs, self.old_inputs = self.old_inputs, self.inputs
+        self.inputs.reset_io()
+    
+    def reset_input(self):
+        self.inputs.reset_io()
+        
+    def reset_output(self):
+        self.outputs.reset_io()
+    
+    def output_slots(self):
+        return self.Outputs.model_fields
+    
+    def input_slots(self):
+        return self.Inputs.model_fields
+    
+    def config_slots(self):
+        return self.Config.model_fields
+    
+    def process_inputs(self):
+        for slot in self.inputs.model_fields_set:
+            old_value = getattr(self.old_inputs, slot)
+            new_value = getattr(self.inputs, slot)
+            old_bool, new_bool = to_bool(old_value), to_bool(new_value)
+            if old_bool != new_bool:
+                if old_bool:
+                    self.on_release(slot, new_value)
+                else:
+                    self.on_press(slot, new_value)
+            else:
+                self.on_update(slot, new_value)
+
+    def set_input(self, slot:str, value):
+        setattr(self.inputs,slot, getattr(self.inputs, slot) + value)
+    
+    def set_output(self, slot:str, value):
+        setattr(self.outputs,slot,value)
+    
+    def get_input(self, slot:str):
+        return getattr(self.inputs, slot)
+    
+    def get_output(self, slot:str):
+        return getattr(self.outputs, slot)
 
     @classmethod
     def register_block_class(cls, block_type: str, type_obj: typing.Type):
@@ -148,29 +234,17 @@ class ConfigBlock:
             raise ValueError(f"'{block_type}' is not a valid type")
         return block_class(data)
 
-    def on_press(self, slot: str, slot_input: InputValue):
+    def on_press(self, slot: str, slot_input):
         pass
 
-    def on_release(self, slot: str, slot_input: InputValue):
+    def on_release(self, slot: str, slot_input):
         pass
 
-    def on_update(self, slot: str, slot_input: InputValue):
+    def on_update(self, slot: str, slot_input):
         pass
 
     def process(self, delta_time: float = 0):
         pass
-
-    def __matmul__(self, slot):
-        if slot in self._output_slots:
-            return self._output_vals.get(slot, 0.0)
-        else:
-            raise KeyError(f"No output slot {slot}")
-
-    def set_output_val(self, slot, value):
-        if slot in self._output_slots:
-            self._output_vals[slot] = value
-        else:
-            raise KeyError(f"No output slot {slot}")
 
     def process_source_end(self, delta_time: float = 0):
         pass
@@ -192,8 +266,8 @@ class ConfigBlock:
             self._loaded = False
 
     def get_destinations(self, slot) -> typing.List[typing.Tuple[str, str]]:
-        if slot in self._output_slots:
-            dest = self[slot]
+        if slot in self.output_slots():
+            dest = self._output_dests.get(slot)
             if not dest:
                 return []
             elif isinstance(dest, str):
@@ -214,38 +288,6 @@ class ConfigBlock:
     def processable(self) -> bool:
         return True
 
-    def __setitem__(self, key, val):
-        if key in self._input_slots:
-            val_obj = self._input_vals.get(key, InputValue(False))
-            self._input_vals[key] = val_obj
-            old_bool, new_bool = bool(val_obj.value), bool(val)
-            val_obj.value = val
-            if old_bool != new_bool:
-                if old_bool:
-                    val_obj.state = InputState.RELEASED
-                    self.on_release(key, val_obj)
-                else:
-                    val_obj.state = InputState.PRESSED
-                    self.on_press(key, val_obj)
-            else:
-                val_obj.state = InputState.UPDATE
-                self.on_update(key, val_obj)
-        elif key in self._output_slots or key in self._config_slots:
-            setattr(self, key, val)
-        else:
-            raise KeyError(f"{type(self).__name__} has no assignable slot {key}")
-
-    def __getitem__(self, key):
-        if key in self._input_slots:
-            return self._input_vals.get(key, InputValue(False))
-        elif key in self._config_slots or key in self._output_slots:
-            if hasattr(self, key):
-                return getattr(self, key)
-            else:
-                return None
-        else:
-            raise KeyError(f"{type(self).__name__} has no readable slot {key}")
-
     def pre_init(self, *args, **kwargs):
         pass
 
@@ -261,40 +303,24 @@ class ConfigBlock:
     def __del__(self):
         self.deactivate()
 
-    def __init__(self, data: typing.Dict[str, typing.Any], *args, **kwargs):
-        self.pre_init(*args, **kwargs)
-        for key in data:
-            if key == "TYPE":
-                pass
-            elif key in self._output_slots:
-                try:
-                    self[key] = data[key]
-                except ValueError:
-                    CONFIG_LOGGER.exception("Error setting slot")
-            elif key in self._input_slots or key in self._config_slots:
-                try:
-                    self[key] = data[key]
-                except ValueError:
-                    CONFIG_LOGGER.exception("Error setting slot")
-            else:
-                CONFIG_LOGGER.error(f"{type(self).__name__} has no slot {key}")
-        self.post_init(*args, **kwargs)
-
 
 # Some basic operator blocks
 
-
 class Multiplier(ConfigBlock):
-    factor = 1
-    _input_slots = ("IN",)
-    _output_slots = ("OUT",)
-    _config_slots = ("factor",)
+    class Inputs(PyroGyroBaseModel):
+        IN: Vec2|Vec3|float = 0
+        
+    class Outputs(PyroGyroBaseModel):
+        OUT: Vec2|Vec3|float = 0
+    
+    class Config(PyroGyroBaseModel):
+        factor: float = 1
 
     def process(self, delta_time: float = 0):
         try:
-            val = self.IN
-            val = val * self.factor
-            self.set_output_val("OUT", val)
+            val = self.inputs.IN
+            val = val * self.config.factor
+            self.set_output("OUT", val)
         except Exception:
             pass
 

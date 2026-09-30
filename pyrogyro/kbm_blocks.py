@@ -1,45 +1,51 @@
 import logging
 import typing
 
+from pydantic import Field, create_model
+
 from pyrogyro.io_types import *
 from pyrogyro.math import *
 
-from pyrogyro.config_blocks import ConfigBlock, InputValue
-
+from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 
 class Keyboard(ConfigBlock):
-    _input_slots = tuple(key.name for key in KeyboardKey)
-    def on_press(self, slot: str, slot_input: InputValue):
+    Inputs = create_model("Inputs",__base__=PyroGyroBaseModel,**{keynum.name: (float|bool, False) for keynum in KeyboardKey})
+    def on_press(self, slot: str, slot_input):
         KeyboardKey[slot].press()
 
-    def on_release(self, slot: str, slot_input: InputValue):
+    def on_release(self, slot: str, slot_input):
         KeyboardKey[slot].release()
 
 MOUSE_POSITION_SLOTS = ("MOVE", "ABSOLUTE")
 
 class Mouse(ConfigBlock):
-    mouse_move_vec = Vec2()
-    mouse_set_vec = Vec2()
-    _input_slots = tuple(mb.name for mb in MouseButtonTarget) + MOUSE_POSITION_SLOTS
+    self_managed_inputs = ("MOVE", "SET")
+    
+    class Inputs(PyroGyroBaseModel):
+        MOVE: Vec2 = Field(default_factory=Vec2)
+        SET: Vec2 = Field(default_factory=Vec2)
+        RIGHT: float|bool = False
+        LEFT: float|bool = False
+        MIDDLE: float|bool = False
     
     def process(self, delta_time: float = 0):
-        x, y = move_mouse(self.mouse_move_vec.x, self.mouse_move_vec.y)
-        self.mouse_move_vec.set_value(x, y)
+        x, y = move_mouse(self.inputs.MOVE.x, self.inputs.MOVE.y)
+        self.inputs.MOVE.set_value(x, y)
 
-    def on_update(self, slot: str, slot_input: InputValue):
+    def on_update(self, slot: str, slot_input):
         if slot_input:
-            vec = to_vec2(slot_input.value)
+            vec = to_vec2(slot_input)
             match slot:
                 case "MOVE":
-                    self.mouse_move_vec += vec
+                    self.inputs.MOVE += vec
                 case "ABSOLUTE":
-                    self.mouse_set_vec += vec
+                    self.inputs.SET += vec
 
-    def on_press(self, slot: str, slot_input: InputValue):
+    def on_press(self, slot: str, slot_input):
         if slot not in MOUSE_POSITION_SLOTS:
             MouseButtonTarget[slot].press()
 
-    def on_release(self, slot: str, slot_input: InputValue):
+    def on_release(self, slot: str, slot_input):
         if slot not in MOUSE_POSITION_SLOTS:
             MouseButtonTarget[slot].release()
 

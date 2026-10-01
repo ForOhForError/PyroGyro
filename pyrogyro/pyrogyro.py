@@ -191,10 +191,12 @@ class PyroGyroMapper:
                         new_mapping = best_match
             if new_mapping is not old_mapping:
                 self.active_config = new_mapping
+                if old_mapping:
+                    old_mapping.unload()
                 if self.active_config:
                     self.logger.info(f"Switched to config {self.active_config.name}")
-                    self.active_config.do_load_unload()
-                    self.active_config.print_config()
+                    self.active_config.load()
+                    self.create_device_map()
                 else:
                     self.logger.info(f"Deactivated all configs.")
 
@@ -289,7 +291,7 @@ class PyroGyroMapper:
             [f"{vidpid[0]:#06x}/{vidpid[1]:#06x}" for vidpid in VID_PID_IGNORE_LIST]
         )
         sdl3.SDL_SetHint(
-            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES,
+            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, # type: ignore
             gamepad_ignore_hint.encode(),  # type: ignore
         )
 

@@ -39,8 +39,6 @@ class ColorSpace(enum.Enum):
 
 
 class ColorSequence(ConfigBlock):
-    _output_slots = ("COLOR", )
-    _config_slots = ("color_sequence", "duration_per_color", "instant_loop", "color_space")
     
     class Outputs(PyroGyroBaseModel):
         COLOR: Vec3 = Field(default_factory=Vec3)
@@ -55,6 +53,7 @@ class ColorSequence(ConfigBlock):
         instant_loop: bool = False
     
     def post_init(self, *args, **kwargs):
+        self.current_color = Vec3()
         if isinstance(self.color_space, str):
             self.color_space = ColorSpace[self.color_space]
         
@@ -72,26 +71,26 @@ class ColorSequence(ConfigBlock):
         return True
 
     def process(self, delta_time: float = 0):
-        if self.duration_per_color == 0:
+        if self.config.duration_per_color == 0:
             delta = 0
         else:
-            delta = delta_time / self.duration_per_color
+            delta = delta_time / self.config.duration_per_color
         start, end = (
             self.color_sequence[self.index_start],
             self.color_sequence[self.index_end],
         )
-        self.current_color.set_lerp(start, end, delta)
+        self.config.current_color.set_lerp(start, end, delta)
         if delta >= 1.0:
             self.index_start = self.index_start + 1
             self.index_end = self.index_end + 1
             len_seq = len(self.color_sequence)
-            if self.index_start == len_seq - 1 and self.instant_loop:
+            if self.index_start == len_seq - 1 and self.config.instant_loop:
                 self.index_start = 0
                 self.index_end = 1 if len_seq > 1 else 0
             else:
                 self.index_start = self.index_start % len_seq
                 self.index_end = self.index_end % len_seq
-        self.set_output_val("COLOR", self.get_rgb_color())
+        self.set_output("COLOR", self.get_rgb_color())
 
     def get_rgb_color(self):
         return self.color_space.to_rgb(self.current_color)

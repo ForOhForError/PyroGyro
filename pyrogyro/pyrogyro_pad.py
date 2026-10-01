@@ -141,12 +141,6 @@ class InputPad(ConfigBlock):
                 self.logger.info(
                     f"{button_name} {'pressed' if button_event.down else 'released'}"
                 )
-                # pyro_event = InputEvent(
-                #     enum_val,
-                #     EventType.PRESS if button_event.down else EventType.RELEASE,
-                #     button_event.down,
-                #     timestamp=timestamp,
-                # )
             case sdl3.SDL_EVENT_GAMEPAD_AXIS_MOTION:
                 axis_event = sdl_event.gaxis
                 timestamp = int(axis_event.timestamp)
@@ -259,11 +253,12 @@ for button_name in XBOX_BUTTON_MAP:
     XBOX_INPUTS[button_name] = (float|bool, False)
 
 class XboxPad(ConfigBlock):
-    vpad: vg.VX360Gamepad | None = None
-
     Inputs = create_model("Inputs",__base__=PyroGyroBaseModel,**XBOX_INPUTS)
     class Outputs(PyroGyroBaseModel):
         RUMBLE: Vec2 = Field(default_factory=Vec2)
+
+    def post_init(self, *args, **kwargs):
+        self.vpad: vg.VX360Gamepad | None = None
 
     def process(self, delta_time: float = 0):
         if self.vpad:

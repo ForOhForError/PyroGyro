@@ -74,9 +74,17 @@ class PyroGyroConfig:
             )
         return 0
 
+    def unload(self):
+        for block in self.blocks.values():
+            block.unload()
+    
+    def load(self):
+        for block in self.blocks.values():
+            block.load()
+
     def do_load_unload(self):
         active = self.get_resolution_order()
-        for block in self.get_resolution_order():
+        for block in active:
             block.load()
         for block in self.blocks.values():
             if block not in active:

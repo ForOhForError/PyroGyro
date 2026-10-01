@@ -24,6 +24,7 @@ from pyrogyro.constants import (
     LOG_LEVEL,
     SHOW_STARTUP_VERSION_MODULES,
     VID_PID_IGNORE_LIST,
+    EXPERIMENT_OVERLAY,
     resource_location,
 )
 from pyrogyro.math import *
@@ -103,7 +104,7 @@ class PyroGyroMapper:
         self.do_platform_setup()
         self.calibrating = False
         self.web_server = WebServer()
-        self.overlay = pyrogyro.overlay.Overlay()
+        self.overlay = pyrogyro.overlay.Overlay() if EXPERIMENT_OVERLAY else None
         self.config_lock = threading.Lock()
 
         self.active_config: PyroGyroConfig | None = None
@@ -264,7 +265,8 @@ class PyroGyroMapper:
             pass
 
     def overlay_loop(self):
-        self.overlay.display_loop()
+        if self.overlay:
+            self.overlay.display_loop()
 
     def start_console_input_thread(self):
         threading.Thread(target=self.console_input_loop, daemon=True).start()
@@ -277,7 +279,8 @@ class PyroGyroMapper:
         set_console_visibility(self.visible)
 
     def toggle_overlay(self, *args):
-        self.overlay.toggle_hidden()
+        if self.overlay:
+            self.overlay.toggle_hidden()
 
     @classmethod
     def init_sdl(cls):

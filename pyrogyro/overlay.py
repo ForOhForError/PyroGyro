@@ -98,7 +98,7 @@ class Overlay:
         rad = 100
 
         event = sdl3.SDL_Event()
-        refresh_per_second_target = 60
+        refresh_per_second_target = 30
         ns_per_poll = int(NS_PER_SECOND / refresh_per_second_target)
         start_time = time.time_ns()
         while self.run:

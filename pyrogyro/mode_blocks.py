@@ -102,10 +102,11 @@ class StickDpad(ConfigBlock):
     
     class Config(PyroGyroBaseModel):
         deadzone:float = 0.3
-        divisions:float = 4
+        divisions:int = 4
+        offset_degrees:float = 0
         overlap_degrees:float = 15
     
-    def post_init(self, *args, **kwargs):
+    def post_config(self, *args, **kwargs):
         if self.config.divisions != 4:
             self._outputs = [f"PAD_{(ix+1)}" for ix in range(self.config.divisions)]
             self.Outputs = create_model(
@@ -119,7 +120,7 @@ class StickDpad(ConfigBlock):
         self._bounds = []
         
         for ix in range(self.config.divisions):
-            base = (half_slife_size * ix * 2)
+            base = (half_slife_size * ix * 2)+self.config.offset_degrees
             bound_min, bound_max = (base-half_slife_size-self.config.overlap_degrees)%360, (base+half_slife_size+self.config.overlap_degrees)%360
             self._bounds.append((bound_min,bound_max))
 

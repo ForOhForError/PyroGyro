@@ -100,24 +100,21 @@ class InputPad(ConfigBlock):
 
     def process_source_end(self, delta_time: float = 0):
         if self.sdl_pad:
-            for slot in self.input_slots():
-                value = self.get_input(slot)
-                match slot:
-                    case "RUMBLE":
-                        if value:
-                            vec = to_vec2(value)
-                            sdl3.SDL_RumbleGamepad(
-                                self.sdl_pad, int(abs(vec.x)), int(abs(vec.y)), 1000 # type: ignore
-                            )
-                    case "LED":
-                        if value:
-                            color = to_vec3(value)
-                            color_r, color_g, color_b = (
-                                int(color.x * 255),
-                                int(color.y * 255),
-                                int(color.z * 255),
-                            )
-                            sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b) # type: ignore
+            rumble = self.inputs.RUMBLE
+            if rumble:
+                rumble_vec = to_vec2(rumble)
+                sdl3.SDL_RumbleGamepad(
+                    self.sdl_pad, int(abs(rumble_vec)), int(abs(rumble_vec.y)), 1000 # type: ignore
+                )
+            led = self.inputs.LED
+            if led:
+                color = to_vec3(led)
+                color_r, color_g, color_b = (
+                    int(color.x * 255),
+                    int(color.y * 255),
+                    int(color.z * 255),
+                )
+                sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b) # type: ignore
 
     def poll_start(self):
         self.outputs.GYRO.gyro = Vec3()

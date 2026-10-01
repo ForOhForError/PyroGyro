@@ -103,7 +103,8 @@ class PyroGyroConfig:
 
     def process(self, delta_time:float=0.0):
         sources = set()
-        for block in self.get_resolution_order():
+        resolution_order = self.get_resolution_order()
+        for block in resolution_order:
             if block.is_source():
                 sources.add(block)
             block.process_inputs()
@@ -152,11 +153,13 @@ class ConfigBlock:
         self.pre_init(*args, **kwargs)
         
         self.config:self.Config = self.Config(**data)
+        self.post_config(*args, **kwargs)
         self.inputs:self.Inputs = self.Inputs()
         self.old_inputs:self.Inputs = self.Inputs()
         self.outputs:self.Outputs = self.Outputs()
         self._output_dests: dict[str, str|list[str]] = {}
         self._loaded:bool = False
+        self._suppress = set()
         for key in data:
             if key == "TYPE" or key in self.config_slots():
                 pass
@@ -168,7 +171,13 @@ class ConfigBlock:
             else:
                 CONFIG_LOGGER.error(f"{type(self).__name__} has no slot {key}")
         self.post_init(*args, **kwargs)
-        
+    
+    def post_config(self, *args, **kwargs):
+        pass
+    
+    def suppress_set(self) -> typing.Set[str]:
+        return self._suppress
+    
     def print_config(self):
         for conf_slot in self.Config.model_fields:
             logging.debug(f"{conf_slot} = {getattr(self.config,conf_slot)}")
@@ -176,6 +185,7 @@ class ConfigBlock:
             logging.debug(f"{dest_source} -> {self._output_dests[dest_source]}")
         
     def reset_io(self):
+        self._suppress.clear()
         self.old_inputs.reset_io()
         self.inputs.reset_io()
         self.outputs.reset_io()
@@ -270,6 +280,7 @@ class ConfigBlock:
 
     def unload(self):
         if self._loaded:
+            self.reset_io()
             self.on_unload()
             self._loaded = False
 

@@ -80,7 +80,6 @@ match SYSTEM:
             hwnd = sdl3.SDL_GetPointerProperty(
                 win_props, sdl3.SDL_PROP_WINDOW_WIN32_HWND_POINTER, hwnd
             )
-            logging.debug(f"Window hwnd: {hwnd}")
             style = user32.GetWindowLongA(hwnd, GWL_EXSTYLE)
 
             if passthrough:
@@ -101,7 +100,7 @@ match SYSTEM:
                 style &= ~WS_EX_TRANSPARENT
                 if (style & (WS_EX_LAYERED | LWA_ALPHA)) == WS_EX_LAYERED:
                     style &= ~WS_EX_LAYERED
-                user32.SetWindowLong(hwnd, GWL_EXSTYLE, style)
+                user32.SetWindowLongA(hwnd, GWL_EXSTYLE, style)
 
     case _:
         import pyautogui

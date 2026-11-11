@@ -9,7 +9,7 @@ import math
 import typing
 from dataclasses import dataclass, field
 from pydantic import Field
-from queue import deque
+from collections import deque
 
 from pyrogyro.math import *
 from pyrogyro.config_blocks import ENUM_BY_NAME, ConfigBlock, PyroGyroBaseModel

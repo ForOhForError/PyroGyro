@@ -49,7 +49,7 @@ def download_sdl_binary(
 
 
 SDL_LIBRARIES = [
-    ("", "3.4.16"),
+    ("", "3.4.20"),
     ("image", "3.4.6"),
     ("mixer", "3.2.4"),
     ("net", "3.2.0"),

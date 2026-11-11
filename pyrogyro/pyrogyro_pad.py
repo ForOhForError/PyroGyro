@@ -56,7 +56,6 @@ class InputPad(ConfigBlock):
         self.gyro_calibration = GyroCalibration()
         self.last_timestamp = None
         self.last_gyro_time = None
-        self.delta_time = 0.0
         self.gyro_update = False
 
     def init_gyro(self):
@@ -104,7 +103,7 @@ class InputPad(ConfigBlock):
             if rumble:
                 rumble_vec = to_vec2(rumble)
                 sdl3.SDL_RumbleGamepad(
-                    self.sdl_pad, int(abs(rumble_vec)), int(abs(rumble_vec.y)), 1000 # type: ignore
+                    self.sdl_pad, int(abs(rumble_vec.x)), int(abs(rumble_vec.y)), int(delta_time*1000) # type: ignore
                 )
             led = self.inputs.LED
             if led:
@@ -161,7 +160,6 @@ class InputPad(ConfigBlock):
                     gyro_raw *= RADIANS_TO_DEGREES
                     if self.last_gyro_time == None:
                         self.last_gyro_time = timestamp
-                    self.delta_time += (timestamp - self.last_gyro_time) / 1000000000.0
                     self.last_gyro_time = timestamp
                 elif sensor_type == sdl3.SDL_SENSOR_ACCEL:
                     accel.set_value(*sensor_event.data)

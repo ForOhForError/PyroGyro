@@ -401,7 +401,8 @@ class PyroGyroMapper:
             if self.active_config:
                 self.active_config.process(delta_time=delta_time)
             poll_ns = time.time_ns() - start_time
-            sdl3.SDL_DelayNS(ns_per_poll - poll_ns)  # type: ignore
+            delay_ns = ns_per_poll - poll_ns
+            sdl3.SDL_DelayNS(delay_ns)  # type: ignore
 
     def run(self):
         self.logger.info("PyroGyro Starting")
@@ -433,7 +434,6 @@ class PyroGyroMapper:
                 self.systray.shutdown()
             if self.window_listener:
                 self.window_listener.stop()
-
 
 def appmain(*args, **kwargs):
     logging.basicConfig(

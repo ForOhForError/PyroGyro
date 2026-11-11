@@ -88,9 +88,93 @@ class StickToMouse(ConfigBlock):
                 result = Vec2()
             self.set_output("MOUSE", result)
 
-class StickDpad(ConfigBlock):
-    _config_slots = ("deadzone", "divisions", "overlap_degrees")
+def smoothed_float_sample(input_sample:float, samples:list[float], current_sample:int, smooth_window:int):
+    samples[current_sample] = input_sample
+    average = 0.0
+    for sample in samples:
+        average += sample
+    average /= smooth_window
+    return average
+ 
+def tiered_smoothed_rotation(input_rotation:float, threshold1:float, threshold2:float, samples:list[float], current_sample:int, smooth_window:int):
+    inputMagnitude = abs(input_rotation)
+    directWeight = (inputMagnitude - threshold1) / (threshold2 - threshold1)
+    directWeight = clamp(directWeight, 0.0, 1.0)
+    return (input_rotation * directWeight) + smoothed_float_sample(input_rotation * (1.0 - directWeight), samples, current_sample, smooth_window)
+
+class FlickStick(ConfigBlock):
+    class Inputs(PyroGyroBaseModel):
+        STICK: Vec2 = Field(default_factory=Vec2)
     
+    class Outputs(PyroGyroBaseModel):
+        MOUSE: Vec2 = Field(default_factory=Vec2)
+    
+    class Config(PyroGyroBaseModel):
+        real_world_calibration: float = 360.0
+        flick_time: float = 0.1
+        deadzone: float = 0.1
+        flick_threshold: float = 0.9
+        turn_smooth_threshold: float = 0.1
+        smooth_window: int = 1
+    
+    def post_init(self, *args, **kwargs):
+        self.flick_progress:float = 0.0
+        self.flick_size:float = 0
+        self.last_stick:Vec2 = Vec2()
+        self.smooth_buffer:list[float] = [0.0 for _ in range(self.config.smooth_window)]
+        self.current_sample:int = 0
+    
+    def process(self, delta_time: float = 0):
+        if isinstance(self.inputs.STICK, Vec2):
+            stick_vec:Vec2 = self.inputs.STICK
+            
+            result = 0.0
+            last_length = self.last_stick.length()
+            length = stick_vec.length()
+            
+            if length >= self.config.flick_threshold:
+                if last_length < self.config.flick_threshold:
+                    # Start flick
+                    logging.debug("Start flick")
+                    self.flick_progress = 0.0
+                    self.flick_size = stick_vec.angle()
+                else:
+                    # Turn
+                    stick_angle = stick_vec.angle()
+                    last_stick_angle = self.last_stick.angle()
+                    delta_angle = wrap(stick_angle-last_stick_angle,-180, 180)
+                    self.current_sample = (self.current_sample + 1) % self.config.smooth_window
+                    result += tiered_smoothed_rotation(
+                        delta_angle, 
+                        self.config.turn_smooth_threshold/2, 
+                        self.config.turn_smooth_threshold,
+                        self.smooth_buffer,
+                        self.current_sample,
+                        self.config.smooth_window
+                    )
+            else:
+                # Turn cleanup
+                if last_length >= self.config.flick_threshold:
+                    for i in range(self.config.smooth_window):
+                        self.smooth_buffer[i] = 0.0
+            
+            last_flick_progress = self.flick_progress
+            if last_flick_progress < self.config.flick_time:
+                self.flick_progress = min(self.flick_progress+delta_time, self.config.flick_time)
+                last_norm_progress = last_flick_progress / self.config.flick_time
+                this_norm_progress = self.flick_progress / self.config.flick_time
+                eased_last_norm = ease_out_norm(last_norm_progress)
+                eased_this_norm = ease_out_norm(this_norm_progress)
+                logging.debug(f"flick progress: {self.flick_progress}")
+                result += (eased_this_norm-eased_last_norm) * self.flick_size
+            
+            if result:
+                logging.debug(f"result: {result}")
+            
+            self.outputs.MOUSE.x = result * self.config.real_world_calibration
+            self.last_stick.set_value(stick_vec.x,stick_vec.y)
+
+class StickDpad(ConfigBlock):
     class Inputs(PyroGyroBaseModel):
         STICK: Vec2 = Field(default_factory=Vec2)
     
@@ -143,6 +227,7 @@ class StickDpad(ConfigBlock):
 def register_blocks():
     ConfigBlock.register_block_class("STICK_TO_MOUSE", StickToMouse)
     ConfigBlock.register_block_class("STICK_DPAD", StickDpad)
+    ConfigBlock.register_block_class("FLICK_STICK", FlickStick)
 
 class GridSticks(ConfigBlock):
     pass

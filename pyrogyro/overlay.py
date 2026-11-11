@@ -20,7 +20,6 @@ https://github.com/libsdl-org/SDL/pull/14561
 NS_PER_SECOND = 1000000000
 CIRCLE_SIZE = 30
 
-
 class Overlay:
     def __init__(self):
         self.logger = logging.getLogger("Pyrogyro Overlay")
@@ -54,8 +53,6 @@ class Overlay:
             return
 
         window = self.window_ptr.contents
-        set_window_passthrough(window, True)
-
         sdl3.SDL_SetWindowRelativeMouseMode(window, True)
         sdl3.SDL_HideWindow(window)
 
@@ -67,8 +64,10 @@ class Overlay:
         window = self.window_ptr.contents
         if self.hidden:
             sdl3.SDL_HideWindow(window)
+            set_window_passthrough(window, False)
         else:
             sdl3.SDL_ShowWindow(window)
+            set_window_passthrough(window, True)
 
     def display_loop(self):
         window, renderer = self.window_ptr.contents, self.renderer_ptr.contents
@@ -97,7 +96,6 @@ class Overlay:
         step = 0
         rad = 100
 
-        event = sdl3.SDL_Event()
         refresh_per_second_target = 30
         ns_per_poll = int(NS_PER_SECOND / refresh_per_second_target)
         start_time = time.time_ns()

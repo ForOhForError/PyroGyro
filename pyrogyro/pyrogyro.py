@@ -90,6 +90,7 @@ EVENT_TYPES_PASS_TO_PAD = set(
 def event_filter(userdata, event):
     return not (event.contents.type in EVENT_TYPES_FILTER)
 
+NS_PER_SECOND = 1000000000
 
 class PyroGyroMapper:
     _singleton_instance: "PyroGyroMapper|None" = None
@@ -369,9 +370,9 @@ class PyroGyroMapper:
         last_time = time.time_ns()
         while self.running:
             start_time = time.time_ns()
-            delta_time = (start_time - last_time) / 1000000000
+            delta_time = (start_time - last_time) / NS_PER_SECOND
             last_time = start_time
-            ns_per_poll = int(1000000000 / self.poll_rate)
+            ns_per_poll = int(NS_PER_SECOND / self.poll_rate)
             populate_pads = False
             event = sdl3.SDL_Event()
             for pypad in self.pad_map.values():

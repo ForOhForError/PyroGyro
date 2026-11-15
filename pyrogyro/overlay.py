@@ -5,7 +5,7 @@ import math
 import sdl3
 import logging
 
-from pyrogyro.constants import resource_location
+from pyrogyro.constants import resource_location, OVERLAY_FPS_SHOWN, OVERLAY_FPS_HIDDEN
 from pyrogyro.platform_util import set_window_passthrough
 
 """
@@ -23,6 +23,7 @@ CIRCLE_SIZE = 30
 class Overlay:
     def __init__(self):
         self.logger = logging.getLogger("Pyrogyro Overlay")
+        self.fps_target = OVERLAY_FPS_HIDDEN
         win_name = ctypes.c_char_p(b"Pyrogyro Overlay")
         disp = sdl3.SDL_GetPrimaryDisplay()
         disp_mode = sdl3.SDL_GetCurrentDisplayMode(disp).contents
@@ -63,9 +64,11 @@ class Overlay:
         self.hidden = not self.hidden
         window = self.window_ptr.contents
         if self.hidden:
+            self.fps_target = OVERLAY_FPS_HIDDEN
             sdl3.SDL_HideWindow(window)
             set_window_passthrough(window, False)
         else:
+            self.fps_target = OVERLAY_FPS_SHOWN
             sdl3.SDL_ShowWindow(window)
             set_window_passthrough(window, True)
 
@@ -96,11 +99,10 @@ class Overlay:
         step = 0
         rad = 100
 
-        refresh_per_second_target = 30
-        ns_per_poll = int(NS_PER_SECOND / refresh_per_second_target)
         start_time = time.time_ns()
         while self.run:
             new_time = time.time_ns()
+            ns_per_poll = int(NS_PER_SECOND / self.fps_target)
             delta_time = new_time - start_time
             start_time = new_time
             sdl3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)

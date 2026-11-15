@@ -70,3 +70,9 @@ You'll need [uv](https://docs.astral.sh/uv/) and a working Python environment (3
  `uv run pyrogyro`
 * Build (to Windows executable):  
  `uv run dist`
+
+## AI Policy
+
+AI (Currently being defined here as LLMs in any form, I am not interested in discussing semantics) has not and will not be used in the development of this project.
+
+PRs with AI-generated or AI-consulted code will be closed without discussion. Attempts to circumvent this policy will result in being permanently blocked from contributing to this repository.

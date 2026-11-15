@@ -327,10 +327,10 @@ class ConfigBlock:
 
 class Multiplier(ConfigBlock):
     class Inputs(PyroGyroBaseModel):
-        IN: Vec2|Vec3|float = 0
+        IN: Vec2|Vec3|float = Vec2()
         
     class Outputs(PyroGyroBaseModel):
-        OUT: Vec2|Vec3|float = 0
+        OUT: Vec2|Vec3|float = Vec2()
     
     class Config(PyroGyroBaseModel):
         factor: float = 1

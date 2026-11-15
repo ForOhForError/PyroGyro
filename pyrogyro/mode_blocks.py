@@ -111,6 +111,7 @@ class FlickStick(ConfigBlock):
     
     class Config(PyroGyroBaseModel):
         real_world_calibration: float = 360.0
+        in_game_sens: float = 1
         flick_time: float = 0.1
         deadzone: float = 0.1
         flick_threshold: float = 0.9
@@ -135,9 +136,8 @@ class FlickStick(ConfigBlock):
             if length >= self.config.flick_threshold:
                 if last_length < self.config.flick_threshold:
                     # Start flick
-                    logging.debug("Start flick")
                     self.flick_progress = 0.0
-                    self.flick_size = stick_vec.angle()
+                    self.flick_size = wrap(stick_vec.angle(),-180,180)
                 else:
                     # Turn
                     stick_angle = stick_vec.angle()
@@ -165,13 +165,9 @@ class FlickStick(ConfigBlock):
                 this_norm_progress = self.flick_progress / self.config.flick_time
                 eased_last_norm = ease_out_norm(last_norm_progress)
                 eased_this_norm = ease_out_norm(this_norm_progress)
-                logging.debug(f"flick progress: {self.flick_progress}")
                 result += (eased_this_norm-eased_last_norm) * self.flick_size
             
-            if result:
-                logging.debug(f"result: {result}")
-            
-            self.outputs.MOUSE.x = result * self.config.real_world_calibration
+            self.outputs.MOUSE.x = -result * self.config.real_world_calibration / self.config.in_game_sens
             self.last_stick.set_value(stick_vec.x,stick_vec.y)
 
 class StickDpad(ConfigBlock):

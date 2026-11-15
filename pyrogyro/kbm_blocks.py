@@ -27,10 +27,13 @@ class Mouse(ConfigBlock):
         RIGHT: float|bool = False
         LEFT: float|bool = False
         MIDDLE: float|bool = False
+        
+    def post_init(self, *args, **kwargs):
+        self.leftover = Vec2()
     
     def process(self, delta_time: float = 0):
-        x, y = move_mouse(self.inputs.MOVE.x, self.inputs.MOVE.y)
-        self.inputs.MOVE.set_value(x, y)
+        x, y = move_mouse(self.inputs.MOVE.x+self.leftover.x, self.inputs.MOVE.y+self.leftover.y)
+        self.leftover.set_value(x, y)
 
     def on_update(self, slot: str, slot_input):
         if slot_input:

@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent
 DEBUG = True
 EXPERIMENT_OVERLAY = True
+OVERLAY_FPS_SHOWN = 60
+OVERLAY_FPS_HIDDEN = 4
 LOG_LEVEL = logging.DEBUG
 LOG_FORMAT = "%(message)s"
 LOG_FORMAT_DEBUG = "%(relativeCreated)6d  %(threadName)s | %(filename)s:%(lineno)d | %(name)s - %(levelname)s | %(message)s"

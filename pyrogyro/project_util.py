@@ -127,6 +127,7 @@ def build_windows_dist():
         for entry in dist_dir.rglob("*"):
             zip_file.write(entry, entry.relative_to(dist_dir))
     shutil.copytree("configs", "dist/pyrogyro/configs", dirs_exist_ok=True)
+    shutil.copytree("bin", "dist/pyrogyro/bin", dirs_exist_ok=True)
 
 
 def build_and_copy_frontend():

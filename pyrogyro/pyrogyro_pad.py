@@ -35,7 +35,7 @@ class InputPad(ConfigBlock):
 
     class Config(PyroGyroBaseModel):
         controller_name: str = ".*"
-        multi_pad_mode: str = ""
+        multi_pad_mode: str = "duplicate"
         fancy_gravity: bool = False
 
     def __del__(self):
@@ -199,7 +199,7 @@ class InputPad(ConfigBlock):
                 pad_name = (
                     pad_name_bytes.decode() if pad_name_bytes else "[Name Unknown]"  # type: ignore
                 )
-                if re.fullmatch(self.controller_name, pad_name):
+                if re.fullmatch(self.config.controller_name, pad_name):
                     if self.sdl_pad:
                         sdl3.SDL_CloseGamepad(self.sdl_pad)
                     self.sdl_id = pad_id
@@ -212,11 +212,6 @@ class InputPad(ConfigBlock):
             if new_pad_id:
                 pad_id_list.remove(new_pad_id)
         return self.sdl_id
-
-    def pre_init(self, *args, **kwargs):
-        self.controller_name = ".*"
-        self.multi_pad_mode = "duplicate"
-
 
 ConfigBlock.register_block_class("PAD", InputPad)
 

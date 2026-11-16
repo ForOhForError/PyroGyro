@@ -16,7 +16,8 @@ class StickToMouse(ConfigBlock):
     @dataclass
     class Outputs(PyroGyroBaseModel):
         MOUSE: Vec2 = field(default_factory=Vec2)
-        
+    
+    @dataclass
     class Config(PyroGyroBaseModel):
         real_world_calibration: float = 360.0
         in_game_sens: float = 1.0

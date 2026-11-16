@@ -17,6 +17,12 @@ class PyroGyroBaseModel:
     def load_from_dict(cls, data) -> typing.Self:
         cleaned_data = {key: val for key,val in data.items() if key in cls.fields()}
         return cls(**cleaned_data)
+    
+    def __post_init__(self, *args, **kwargs):
+        # Cast enums by name
+        for field in self.instance_fields():
+            if isinstance(field.type,type) and issubclass(field.type,enum.Enum):
+                setattr(self,field.name,field.type[getattr(self,field.name)])
 
     def reset_io(self):
         for field in self.instance_fields():

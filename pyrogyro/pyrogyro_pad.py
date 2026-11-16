@@ -2,7 +2,6 @@ import logging
 import re
 import typing
 
-from pydantic import Field, create_model
 import sdl3
 import vgamepad as vg
 
@@ -13,26 +12,29 @@ from pyrogyro.math import *
 
 from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 
-PAD_OUTPUTS = {
-    "GYRO": (GyroData,Field(default_factory=GyroData)),
-    "TOUCHPAD_PRESS": (float, 0),
-    "PADS": (float, 0),
-}
+from dataclasses import dataclass, field, make_dataclass
+
+PAD_OUTPUTS = [
+    ("GYRO",GyroData,field(default_factory=GyroData)),
+    ("PADS", float, field(default=0))
+]
 for sdl_button_enum in SDLButtonSource:
-    PAD_OUTPUTS[sdl_button_enum.name] = (float|bool, False)
+    PAD_OUTPUTS.append((sdl_button_enum.name, float|bool, field(default=False)))
 for sdl_axis_enum in SingleAxisSource:
-    PAD_OUTPUTS[sdl_axis_enum.name] = (float, 0)
+    PAD_OUTPUTS.append((sdl_axis_enum.name, float, field(default=0)))
 for sdl_double_axis_enum in DoubleAxisSource:
-    PAD_OUTPUTS[sdl_double_axis_enum.name] = (Vec2, Field(default_factory=Vec2))
+    PAD_OUTPUTS.append((sdl_double_axis_enum.name, Vec2, field(default_factory=Vec2)))
 
 class InputPad(ConfigBlock):
     logger = logging.getLogger("InputPad")
-    Outputs = create_model("Outputs",__base__=PyroGyroBaseModel,**PAD_OUTPUTS)
+    Outputs = make_dataclass("Outputs",PAD_OUTPUTS,bases=(PyroGyroBaseModel,))
     
+    @dataclass
     class Inputs(PyroGyroBaseModel):
-        RUMBLE: Vec2 = Field(default_factory=Vec2)
-        LED: Vec3 = Field(default_factory=Vec3)
+        RUMBLE: Vec2 = field(default_factory=Vec2)
+        LED: Vec3 = field(default_factory=Vec3)
 
+    @dataclass
     class Config(PyroGyroBaseModel):
         controller_name: str = ".*"
         multi_pad_mode: str = "duplicate"
@@ -233,19 +235,21 @@ XBOX_BUTTON_MAP = {
     "GUIDE": vg.XUSB_BUTTON.XUSB_GAMEPAD_GUIDE,
 }
 
-XBOX_INPUTS = {
-    "L2":(float,0),
-    "R2":(float,0),
-    "LSTICK":(Vec2,Field(default_factory=Vec2)),
-    "RSTICK":(Vec2,Field(default_factory=Vec2)),
-}
+XBOX_INPUTS = [
+    ("L2",float,field(default=0)),
+    ("R2",float,field(default=0)),
+    ("LSTICK",Vec2,field(default_factory=Vec2)),
+    ("RSTICK",Vec2,field(default_factory=Vec2)),
+]
 for button_name in XBOX_BUTTON_MAP:
-    XBOX_INPUTS[button_name] = (float|bool, False)
+    XBOX_INPUTS.append((button_name, float|bool, field(default=False)))
 
 class XboxPad(ConfigBlock):
-    Inputs = create_model("Inputs",__base__=PyroGyroBaseModel,**XBOX_INPUTS)
+    Inputs = make_dataclass("Inputs",XBOX_INPUTS,bases=(PyroGyroBaseModel,))
+    
+    @dataclass
     class Outputs(PyroGyroBaseModel):
-        RUMBLE: Vec2 = Field(default_factory=Vec2)
+        RUMBLE: Vec2 = field(default_factory=Vec2)
 
     def post_init(self, *args, **kwargs):
         self.vpad: vg.VX360Gamepad | None = None

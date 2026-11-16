@@ -1,12 +1,10 @@
-from pydantic import Field
-
 from pyrogyro.math import *
 import colorsys
 import enum
 import typing
 from dataclasses import dataclass, field
 
-from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel, ENUM_BY_NAME
+from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 
 HSV_ROYGBIV = [
     Vec3(x=0, y=1, z=1),
@@ -37,14 +35,15 @@ class ColorSpace(enum.Enum):
         return in_color
 
 
-
 class ColorSequence(ConfigBlock):
     
+    @dataclass
     class Outputs(PyroGyroBaseModel):
-        COLOR: Vec3 = Field(default_factory=Vec3)
+        COLOR: Vec3 = field(default_factory=Vec3)
 
+    @dataclass
     class Configs(PyroGyroBaseModel):
-        color_sequence: list[Vec3] = Field(default_factory=list)
+        color_sequence: list[Vec3] = field(default_factory=list)
         index_start: int = 0
         index_end: int = 0
         start_ts: typing.Optional[int] = None

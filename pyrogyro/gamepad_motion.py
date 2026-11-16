@@ -8,11 +8,10 @@ import logging
 import math
 import typing
 from dataclasses import dataclass, field
-from pydantic import Field
 from collections import deque
 
 from pyrogyro.math import *
-from pyrogyro.config_blocks import ENUM_BY_NAME, ConfigBlock, PyroGyroBaseModel
+from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 
 @dataclass
 class GyroCalibration:
@@ -235,16 +234,19 @@ class GyroMode(enum.Enum):
 class GyroToMouse(ConfigBlock):
     smooth_buffer = deque()
     
+    @dataclass
     class Inputs(PyroGyroBaseModel):
-        GYRO: GyroData = Field(default_factory=GyroData)
+        GYRO: GyroData = field(default_factory=GyroData)
         GYRO_ON: float|bool = 0
         GYRO_OFF: float|bool = 0
     
+    @dataclass
     class Outputs(PyroGyroBaseModel):
-        MOUSE: Vec2 = Field(default_factory=Vec2)
+        MOUSE: Vec2 = field(default_factory=Vec2)
     
+    @dataclass
     class Config(PyroGyroBaseModel):
-        mode: ENUM_BY_NAME(GyroMode) = GyroMode.OFF
+        mode: GyroMode = GyroMode.OFF
         sens: float | typing.Tuple[float, float] = 1.0
         fast_sens: typing.Optional[float | typing.Tuple[float, float]] = None
         slow_threshold: float = 0.0

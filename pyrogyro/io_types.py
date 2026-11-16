@@ -3,6 +3,7 @@ import typing
 
 import sdl3
 from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
+KEYBOARD_KEYS = [key for key in KEYBOARD_KEYS if key.isidentifier()]
 
 from pyrogyro.math import *
 from pyrogyro.platform_util import keyDown, keyUp, mouseDown, mouseUp, move_mouse

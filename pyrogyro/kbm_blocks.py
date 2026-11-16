@@ -1,15 +1,19 @@
 import logging
 import typing
 
-from pydantic import Field, create_model
-
 from pyrogyro.io_types import *
 from pyrogyro.math import *
 
 from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 
+from dataclasses import dataclass, make_dataclass, field
+
 class Keyboard(ConfigBlock):
-    Inputs = create_model("Inputs",__base__=PyroGyroBaseModel,**{keynum.name: (float|bool, False) for keynum in KeyboardKey})
+    Inputs = make_dataclass(
+        "Inputs",
+        [(keynum.name, float|bool, field(default=False)) for keynum in KeyboardKey],
+        bases=(PyroGyroBaseModel,)
+    )
     def on_press(self, slot: str, slot_input):
         KeyboardKey[slot].press()
 
@@ -21,9 +25,10 @@ MOUSE_POSITION_SLOTS = ("MOVE", "ABSOLUTE")
 class Mouse(ConfigBlock):
     self_managed_inputs = ("MOVE", "SET")
     
+    @dataclass
     class Inputs(PyroGyroBaseModel):
-        MOVE: Vec2 = Field(default_factory=Vec2)
-        SET: Vec2 = Field(default_factory=Vec2)
+        MOVE: Vec2 = field(default_factory=Vec2)
+        SET: Vec2 = field(default_factory=Vec2)
         RIGHT: float|bool = False
         LEFT: float|bool = False
         MIDDLE: float|bool = False

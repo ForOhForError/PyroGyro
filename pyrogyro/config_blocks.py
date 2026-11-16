@@ -1,7 +1,6 @@
-from dataclasses import dataclass
+import dataclasses
 import enum
 
-from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 import typing
 import logging
 import tomlkit
@@ -12,27 +11,34 @@ from pyrogyro.math import *
 
 CONFIG_LOGGER = logging.getLogger("Config")
 
-EnumNameSerializer = PlainSerializer(
-    lambda e: e.name, return_type="str", when_used="always"
-)
+@dataclass
+class PyroGyroBaseModel:
+    @classmethod
+    def load_from_dict(cls, data) -> typing.Self:
+        cleaned_data = {key: val for key,val in data.items() if key in cls.fields()}
+        return cls(**cleaned_data)
 
-def ENUM_BY_NAME(T):
-    def constructed_by_name(v: str | T) -> T:
-        try:
-            return T[v]
-        except (KeyError, TypeError):
-            raise ValueError(f"{v} is not a valid value of {T.__name__}")
-
-    return typing.Annotated[
-        T, EnumNameSerializer, BeforeValidator(constructed_by_name)
-    ]
-
-class PyroGyroBaseModel(BaseModel, validate_assignment=DEBUG):
     def reset_io(self):
-        for field, field_info in type(self).model_fields.items():
-            setattr(self, field, field_info.get_default())
-        self.model_fields_set.clear()
+        for field in self.instance_fields():
+            name, default_value = field.name, field.default_factory() if field.default_factory != dataclasses.MISSING else field.default
+            setattr(self, name, default_value)
+    
+    def refresh_field_cache(self):
+        self._fields = dataclasses.fields(self)
+    
+    def instance_fields(self):
+        if not hasattr(self, "_fields"):
+            self._fields = dataclasses.fields(self)
+        return self._fields
 
+    def instance_field_names(self):
+        return [field.name for field in self.instance_fields()]
+    
+    @classmethod
+    def fields(cls) -> list[str]:
+        return [field.name for field in dataclasses.fields(cls)]
+
+@dataclass
 class NoData(PyroGyroBaseModel):
     pass
 
@@ -152,7 +158,7 @@ class ConfigBlock:
     def __init__(self, data: typing.Dict[str, typing.Any], *args, **kwargs):
         self.pre_init(*args, **kwargs)
         
-        self.config:self.Config = self.Config(**data)
+        self.config:self.Config = self.Config.load_from_dict(data)
         self.post_config(*args, **kwargs)
         self.inputs:self.Inputs = self.Inputs()
         self.old_inputs:self.Inputs = self.Inputs()
@@ -179,7 +185,7 @@ class ConfigBlock:
         return self._suppress
     
     def print_config(self):
-        for conf_slot in self.Config.model_fields:
+        for conf_slot in self.Config.fields():
             logging.debug(f"{conf_slot} = {getattr(self.config,conf_slot)}")
         for dest_source in self._output_dests:
             logging.debug(f"{dest_source} -> {self._output_dests[dest_source]}")
@@ -201,16 +207,16 @@ class ConfigBlock:
         self.outputs.reset_io()
     
     def output_slots(self):
-        return self.Outputs.model_fields
+        return self.outputs.instance_field_names()
     
     def input_slots(self):
-        return self.Inputs.model_fields
+        return self.inputs.instance_field_names()
     
     def config_slots(self):
-        return self.Config.model_fields
+        return self.config.instance_field_names()
     
     def process_inputs(self):
-        for slot in self.inputs.model_fields_set:
+        for slot in self.inputs.instance_field_names():
             old_value = getattr(self.old_inputs, slot)
             new_value = getattr(self.inputs, slot)
             old_bool, new_bool = to_bool(old_value), to_bool(new_value)

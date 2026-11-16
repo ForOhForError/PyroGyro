@@ -4,16 +4,18 @@ import logging
 from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 import typing
 from pyrogyro.math import *
-from pydantic import Field, create_model
+from dataclasses import dataclass, field, make_dataclass
 
 ZERO_VEC2 = Vec2()
 
 class StickToMouse(ConfigBlock):
+    @dataclass
     class Inputs(PyroGyroBaseModel):
-        STICK: Vec2 = Field(default_factory=Vec2)
+        STICK: Vec2 = field(default_factory=Vec2)
     
+    @dataclass
     class Outputs(PyroGyroBaseModel):
-        MOUSE: Vec2 = Field(default_factory=Vec2)
+        MOUSE: Vec2 = field(default_factory=Vec2)
         
     class Config(PyroGyroBaseModel):
         real_world_calibration: float = 360.0
@@ -103,12 +105,15 @@ def tiered_smoothed_rotation(input_rotation:float, threshold1:float, threshold2:
     return (input_rotation * directWeight) + smoothed_float_sample(input_rotation * (1.0 - directWeight), samples, current_sample, smooth_window)
 
 class FlickStick(ConfigBlock):
+    @dataclass
     class Inputs(PyroGyroBaseModel):
-        STICK: Vec2 = Field(default_factory=Vec2)
+        STICK: Vec2 = field(default_factory=Vec2)
     
+    @dataclass
     class Outputs(PyroGyroBaseModel):
-        MOUSE: Vec2 = Field(default_factory=Vec2)
+        MOUSE: Vec2 = field(default_factory=Vec2)
     
+    @dataclass
     class Config(PyroGyroBaseModel):
         real_world_calibration: float = 360.0
         in_game_sens: float = 1
@@ -171,15 +176,18 @@ class FlickStick(ConfigBlock):
             self.last_stick.set_value(stick_vec.x,stick_vec.y)
 
 class StickDpad(ConfigBlock):
+    @dataclass
     class Inputs(PyroGyroBaseModel):
-        STICK: Vec2 = Field(default_factory=Vec2)
+        STICK: Vec2 = field(default_factory=Vec2)
     
+    @dataclass
     class Outputs(PyroGyroBaseModel):
         UP:float|bool = False
         LEFT:float|bool = False
         DOWN:float|bool = False
         RIGHT:float|bool = False
     
+    @dataclass
     class Config(PyroGyroBaseModel):
         deadzone:float = 0.3
         divisions:int = 4
@@ -189,10 +197,10 @@ class StickDpad(ConfigBlock):
     def post_config(self, *args, **kwargs):
         if self.config.divisions != 4:
             self._outputs = [f"PAD_{(ix+1)}" for ix in range(self.config.divisions)]
-            self.Outputs = create_model(
+            self.Outputs = make_dataclass(
                 "Outputs",
-                __base__=PyroGyroBaseModel,
-                **{out_name: (float|bool, False) for out_name in self._outputs} # type: ignore
+                [(out_name,float|bool,field(default=False)) for out_name in self._outputs],
+                bases=(PyroGyroBaseModel,)
             )
         else:
             self._outputs = ["UP","LEFT","DOWN","RIGHT"]

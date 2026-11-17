@@ -6,7 +6,12 @@ import sdl3
 import vgamepad as vg
 
 from pyrogyro.constants import DEFAULT_POLL_RATE
-from pyrogyro.gamepad_motion import GyroCalibration, sensor_fusion_gravity, sensor_fusion_gravity_fancy, GyroData
+from pyrogyro.gamepad_motion import (
+    GyroCalibration,
+    sensor_fusion_gravity,
+    sensor_fusion_gravity_fancy,
+    GyroData,
+)
 from pyrogyro.io_types import *
 from pyrogyro.math import *
 
@@ -15,20 +20,21 @@ from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
 from dataclasses import dataclass, field, make_dataclass
 
 PAD_OUTPUTS = [
-    ("GYRO",GyroData,field(default_factory=GyroData)),
-    ("PADS", float, field(default=0))
+    ("GYRO", GyroData, field(default_factory=GyroData)),
+    ("PADS", float, field(default=0)),
 ]
 for sdl_button_enum in SDLButtonSource:
-    PAD_OUTPUTS.append((sdl_button_enum.name, float|bool, field(default=False)))
+    PAD_OUTPUTS.append((sdl_button_enum.name, float | bool, field(default=False)))
 for sdl_axis_enum in SingleAxisSource:
     PAD_OUTPUTS.append((sdl_axis_enum.name, float, field(default=0)))
 for sdl_double_axis_enum in DoubleAxisSource:
     PAD_OUTPUTS.append((sdl_double_axis_enum.name, Vec2, field(default_factory=Vec2)))
 
+
 class InputPad(ConfigBlock):
     logger = logging.getLogger("InputPad")
-    Outputs = make_dataclass("Outputs",PAD_OUTPUTS,bases=(PyroGyroBaseModel,))
-    
+    Outputs = make_dataclass("Outputs", PAD_OUTPUTS, bases=(PyroGyroBaseModel,))
+
     @dataclass
     class Inputs(PyroGyroBaseModel):
         RUMBLE: Vec2 = field(default_factory=Vec2)
@@ -73,13 +79,13 @@ class InputPad(ConfigBlock):
         )
         if self.sdl_pad:
             for gyro_sensor in gyro_sensors:
-                if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor): # type: ignore
+                if sdl3.SDL_GamepadHasSensor(self.sdl_pad, gyro_sensor):  # type: ignore
                     self.logger.info("Gyro Sensor Detected")
-                    sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, gyro_sensor, True) # type: ignore
+                    sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, gyro_sensor, True)  # type: ignore
             for accel_sensor in accel_sensors:
-                if sdl3.SDL_GamepadHasSensor(self.sdl_pad, accel_sensor): # type: ignore
+                if sdl3.SDL_GamepadHasSensor(self.sdl_pad, accel_sensor):  # type: ignore
                     self.logger.info("Accel Sensor Detected")
-                    sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True) # type: ignore
+                    sdl3.SDL_SetGamepadSensorEnabled(self.sdl_pad, accel_sensor, True)  # type: ignore
 
     def process(self, delta_time: float = 0):
         if self.gyro_update:
@@ -87,16 +93,14 @@ class InputPad(ConfigBlock):
             if delta_time > delta_max:
                 self.logger.debug(f"got delayed update clocking at {delta_time}")
                 delta_time = 0
-            self.outputs.GYRO.gyro = self.gyro_calibration.calibrated(self.outputs.GYRO.gyro)
+            self.outputs.GYRO.gyro = self.gyro_calibration.calibrated(
+                self.outputs.GYRO.gyro
+            )
             adjusted_delta = delta_time if delta_time <= delta_max else 0
             if self.config.fancy_gravity:
-                sensor_fusion_gravity_fancy(
-                    self.outputs.GYRO, adjusted_delta
-                )
+                sensor_fusion_gravity_fancy(self.outputs.GYRO, adjusted_delta)
             else:
-                sensor_fusion_gravity(
-                    self.outputs.GYRO, adjusted_delta
-                )
+                sensor_fusion_gravity(self.outputs.GYRO, adjusted_delta)
         self.gyro_update = False
 
     def process_source_end(self, delta_time: float = 0):
@@ -105,7 +109,10 @@ class InputPad(ConfigBlock):
             if rumble:
                 rumble_vec = to_vec2(rumble)
                 sdl3.SDL_RumbleGamepad(
-                    self.sdl_pad, int(abs(rumble_vec.x)), int(abs(rumble_vec.y)), int(delta_time*1000) # type: ignore
+                    self.sdl_pad,
+                    int(abs(rumble_vec.x)),
+                    int(abs(rumble_vec.y)),
+                    int(delta_time * 1000),  # type: ignore
                 )
             led = self.inputs.LED
             if led:
@@ -115,7 +122,7 @@ class InputPad(ConfigBlock):
                     int(color.y * 255),
                     int(color.z * 255),
                 )
-                sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b) # type: ignore
+                sdl3.SDL_SetGamepadLED(self.sdl_pad, color_r, color_g, color_b)  # type: ignore
 
     def poll_start(self):
         self.outputs.GYRO.gyro = Vec3()
@@ -215,6 +222,7 @@ class InputPad(ConfigBlock):
                 pad_id_list.remove(new_pad_id)
         return self.sdl_id
 
+
 ConfigBlock.register_block_class("PAD", InputPad)
 
 XBOX_BUTTON_MAP = {
@@ -236,17 +244,18 @@ XBOX_BUTTON_MAP = {
 }
 
 XBOX_INPUTS = [
-    ("L2",float,field(default=0)),
-    ("R2",float,field(default=0)),
-    ("LSTICK",Vec2,field(default_factory=Vec2)),
-    ("RSTICK",Vec2,field(default_factory=Vec2)),
+    ("L2", float, field(default=0)),
+    ("R2", float, field(default=0)),
+    ("LSTICK", Vec2, field(default_factory=Vec2)),
+    ("RSTICK", Vec2, field(default_factory=Vec2)),
 ]
 for button_name in XBOX_BUTTON_MAP:
-    XBOX_INPUTS.append((button_name, float|bool, field(default=False)))
+    XBOX_INPUTS.append((button_name, float | bool, field(default=False)))
+
 
 class XboxPad(ConfigBlock):
-    Inputs = make_dataclass("Inputs",XBOX_INPUTS,bases=(PyroGyroBaseModel,))
-    
+    Inputs = make_dataclass("Inputs", XBOX_INPUTS, bases=(PyroGyroBaseModel,))
+
     @dataclass
     class Outputs(PyroGyroBaseModel):
         RUMBLE: Vec2 = field(default_factory=Vec2)

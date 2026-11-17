@@ -16,9 +16,9 @@ RGB_PYRO_GYRO = [
     Vec3(x=255 / 255.0, y=209 / 255.0, z=65 / 255.0),
 ]
 
+
 class ColorScheme(enum.Enum):
     RAINBOW = HSV_ROYGBIV
-
 
 
 class ColorSpace(enum.Enum):
@@ -36,7 +36,6 @@ class ColorSpace(enum.Enum):
 
 
 class ColorSequence(ConfigBlock):
-    
     @dataclass
     class Outputs(PyroGyroBaseModel):
         COLOR: Vec3 = field(default_factory=Vec3)
@@ -50,15 +49,15 @@ class ColorSequence(ConfigBlock):
         duration_per_color: float = 1
         color_space: ColorSpace = ColorSpace.RGB
         instant_loop: bool = False
-    
+
     def post_init(self, *args, **kwargs):
         self.current_color = Vec3()
         if isinstance(self.color_space, str):
             self.color_space = ColorSpace[self.color_space]
-        
+
         if isinstance(self.color_sequence, str):
             self.color_sequence = ColorScheme[self.color_sequence].value
-        
+
         self.index_start = 0
         if len(self.color_sequence) > 1:
             self.index_end = 1
@@ -93,6 +92,7 @@ class ColorSequence(ConfigBlock):
 
     def get_rgb_color(self):
         return self.color_space.to_rgb(self.current_color)
+
 
 def register_blocks():
     ConfigBlock.register_block_class("COLOR_SEQUENCE", ColorSequence)

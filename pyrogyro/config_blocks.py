@@ -11,27 +11,33 @@ from pyrogyro.math import *
 
 CONFIG_LOGGER = logging.getLogger("Config")
 
+
 @dataclass
 class PyroGyroBaseModel:
     @classmethod
     def load_from_dict(cls, data) -> typing.Self:
-        cleaned_data = {key: val for key,val in data.items() if key in cls.fields()}
+        cleaned_data = {key: val for key, val in data.items() if key in cls.fields()}
         return cls(**cleaned_data)
-    
+
     def __post_init__(self, *args, **kwargs):
         # Cast enums by name
         for field in self.instance_fields():
-            if isinstance(field.type,type) and issubclass(field.type,enum.Enum):
-                setattr(self,field.name,field.type[getattr(self,field.name)])
+            if isinstance(field.type, type) and issubclass(field.type, enum.Enum):
+                setattr(self, field.name, field.type[getattr(self, field.name)])
 
     def reset_io(self):
         for field in self.instance_fields():
-            name, default_value = field.name, field.default_factory() if field.default_factory != dataclasses.MISSING else field.default
+            name, default_value = (
+                field.name,
+                field.default_factory()
+                if field.default_factory != dataclasses.MISSING
+                else field.default,
+            )
             setattr(self, name, default_value)
-    
+
     def refresh_field_cache(self):
         self._fields = dataclasses.fields(self)
-    
+
     def instance_fields(self):
         if not hasattr(self, "_fields"):
             self._fields = dataclasses.fields(self)
@@ -39,22 +45,24 @@ class PyroGyroBaseModel:
 
     def instance_field_names(self):
         return [field.name for field in self.instance_fields()]
-    
+
     @classmethod
     def fields(cls) -> list[str]:
         return [field.name for field in dataclasses.fields(cls)]
+
 
 @dataclass
 class NoData(PyroGyroBaseModel):
     pass
 
+
 class PyroGyroConfig:
     def __init__(self, data):
         self.blocks: dict[str, ConfigBlock] = {}
         self.name = data.get("name", "PyroGyro Config")
-        self.autoload = data.get("autoload", True)
-        self.autoload_exe_name = data.get("autoload_exe_name", self.name)
-        self.autoload_window_name = data.get("autoload_window_name", self.name)
+        self.autoload = data.get("autoload", False)
+        self.autoload_exe_name = data.get("autoload_exe_name", ".*")
+        self.autoload_window_name = data.get("autoload_window_name", ".*")
         for key, value in data.items():
             if isinstance(value, dict):
                 block = ConfigBlock.parse_from_dict(value)
@@ -89,7 +97,7 @@ class PyroGyroConfig:
     def unload(self):
         for block in self.blocks.values():
             block.unload()
-    
+
     def load(self):
         for block in self.blocks.values():
             block.load()
@@ -113,7 +121,7 @@ class PyroGyroConfig:
         for block in self.blocks.values():
             block.reset_io()
 
-    def process(self, delta_time:float=0.0):
+    def process(self, delta_time: float = 0.0):
         sources = set()
         resolution_order = self.get_resolution_order()
         for block in resolution_order:
@@ -153,6 +161,7 @@ class PyroGyroConfig:
             done.add(next)
         return order
 
+
 class ConfigBlock:
     class Register:
         BLOCK_TYPES: typing.Dict[str, type] = {}
@@ -160,17 +169,17 @@ class ConfigBlock:
     Inputs: type[PyroGyroBaseModel] = NoData
     Outputs: type[PyroGyroBaseModel] = NoData
     Config: type[PyroGyroBaseModel] = NoData
-    
+
     def __init__(self, data: typing.Dict[str, typing.Any], *args, **kwargs):
         self.pre_init(*args, **kwargs)
-        
-        self.config:self.Config = self.Config.load_from_dict(data)
+
+        self.config: self.Config = self.Config.load_from_dict(data)
         self.post_config(*args, **kwargs)
-        self.inputs:self.Inputs = self.Inputs()
-        self.old_inputs:self.Inputs = self.Inputs()
-        self.outputs:self.Outputs = self.Outputs()
-        self._output_dests: dict[str, str|list[str]] = {}
-        self._loaded:bool = False
+        self.inputs: self.Inputs = self.Inputs()
+        self.old_inputs: self.Inputs = self.Inputs()
+        self.outputs: self.Outputs = self.Outputs()
+        self._output_dests: dict[str, str | list[str]] = {}
+        self._loaded: bool = False
         self._suppress = set()
         for key in data:
             if key == "TYPE" or key in self.config_slots():
@@ -183,44 +192,44 @@ class ConfigBlock:
             else:
                 CONFIG_LOGGER.error(f"{type(self).__name__} has no slot {key}")
         self.post_init(*args, **kwargs)
-    
+
     def post_config(self, *args, **kwargs):
         pass
-    
+
     def suppress_set(self) -> typing.Set[str]:
         return self._suppress
-    
+
     def print_config(self):
         for conf_slot in self.Config.fields():
-            logging.debug(f"{conf_slot} = {getattr(self.config,conf_slot)}")
+            logging.debug(f"{conf_slot} = {getattr(self.config, conf_slot)}")
         for dest_source in self._output_dests:
             logging.debug(f"{dest_source} -> {self._output_dests[dest_source]}")
-        
+
     def reset_io(self):
         self._suppress.clear()
         self.old_inputs.reset_io()
         self.inputs.reset_io()
         self.outputs.reset_io()
-    
+
     def flip_inputs(self):
         self.inputs, self.old_inputs = self.old_inputs, self.inputs
         self.inputs.reset_io()
-    
+
     def reset_input(self):
         self.inputs.reset_io()
-        
+
     def reset_output(self):
         self.outputs.reset_io()
-    
+
     def output_slots(self):
         return self.outputs.instance_field_names()
-    
+
     def input_slots(self):
         return self.inputs.instance_field_names()
-    
+
     def config_slots(self):
         return self.config.instance_field_names()
-    
+
     def process_inputs(self):
         for slot in self.inputs.instance_field_names():
             old_value = getattr(self.old_inputs, slot)
@@ -234,16 +243,16 @@ class ConfigBlock:
             else:
                 self.on_update(slot, new_value)
 
-    def set_input(self, slot:str, value):
-        setattr(self.inputs,slot, getattr(self.inputs, slot) + value)
-    
-    def set_output(self, slot:str, value):
-        setattr(self.outputs,slot,value)
-    
-    def get_input(self, slot:str):
+    def set_input(self, slot: str, value):
+        setattr(self.inputs, slot, getattr(self.inputs, slot) + value)
+
+    def set_output(self, slot: str, value):
+        setattr(self.outputs, slot, value)
+
+    def get_input(self, slot: str):
         return getattr(self.inputs, slot)
-    
-    def get_output(self, slot:str):
+
+    def get_output(self, slot: str):
         return getattr(self.outputs, slot)
 
     @classmethod
@@ -337,13 +346,14 @@ class ConfigBlock:
 
 # Some basic operator blocks
 
+
 class Multiplier(ConfigBlock):
     class Inputs(PyroGyroBaseModel):
-        IN: Vec2|Vec3|float = Vec2()
-        
+        IN: Vec2 | Vec3 | float = Vec2()
+
     class Outputs(PyroGyroBaseModel):
-        OUT: Vec2|Vec3|float = Vec2()
-    
+        OUT: Vec2 | Vec3 | float = Vec2()
+
     class Config(PyroGyroBaseModel):
         factor: float = 1
 
@@ -354,5 +364,6 @@ class Multiplier(ConfigBlock):
             self.set_output("OUT", val)
         except Exception:
             pass
+
 
 ConfigBlock.register_block_class("MULT", Multiplier)

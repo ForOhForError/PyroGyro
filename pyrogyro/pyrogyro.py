@@ -43,6 +43,7 @@ import pyrogyro.kbm_blocks
 import pyrogyro.gamepad_motion
 import pyrogyro.mode_blocks
 import pyrogyro.color_led
+
 pyrogyro.kbm_blocks.register_blocks()
 pyrogyro.gamepad_motion.register_blocks()
 pyrogyro.mode_blocks.register_blocks()
@@ -90,7 +91,9 @@ EVENT_TYPES_PASS_TO_PAD = set(
 def event_filter(userdata, event):
     return not (event.contents.type in EVENT_TYPES_FILTER)
 
+
 NS_PER_SECOND = 1000000000
+
 
 class PyroGyroMapper:
     _singleton_instance: "PyroGyroMapper|None" = None
@@ -179,7 +182,9 @@ class PyroGyroMapper:
                 if len(potential_mappings) == 1:
                     new_mapping = potential_mappings[0]
                 else:
-                    potential_mappings.sort(key=PyroGyroConfig.count_autoload_specificity)
+                    potential_mappings.sort(
+                        key=PyroGyroConfig.count_autoload_specificity
+                    )
                     best_match = potential_mappings[-1]
                     final_value = best_match.count_autoload_specificity()
                     remaining_mappings = len(
@@ -295,7 +300,7 @@ class PyroGyroMapper:
             [f"{vidpid[0]:#06x}/{vidpid[1]:#06x}" for vidpid in VID_PID_IGNORE_LIST]
         )
         sdl3.SDL_SetHint(
-            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, # type: ignore
+            sdl3.SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES,  # type: ignore
             gamepad_ignore_hint.encode(),  # type: ignore
         )
 
@@ -436,6 +441,7 @@ class PyroGyroMapper:
             if self.window_listener:
                 self.window_listener.stop()
 
+
 def appmain(*args, **kwargs):
     logging.basicConfig(
         level=LOG_LEVEL, format=LOG_FORMAT_DEBUG if DEBUG else LOG_FORMAT
@@ -443,10 +449,12 @@ def appmain(*args, **kwargs):
     PyroGyroMapper.init_sdl()
     PyroGyroMapper.instance().run()
 
+
 def profile():
     import cProfile
     import pstats
     from pyrogyro.constants import ROOT_DIR
+
     logging.basicConfig(
         level=LOG_LEVEL, format=LOG_FORMAT_DEBUG if DEBUG else LOG_FORMAT
     )
@@ -456,7 +464,8 @@ def profile():
         stats = pstats.Stats(pr)
         stats.sort_stats(pstats.SortKey.TIME)
         stats.print_stats(0.1)
-        stats.dump_stats(ROOT_DIR/"pyrogyro.prof")
+        stats.dump_stats(ROOT_DIR / "pyrogyro.prof")
+
 
 if __name__ == "__main__":
     appmain(sys.argv)

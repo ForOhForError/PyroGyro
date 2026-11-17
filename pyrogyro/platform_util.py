@@ -128,7 +128,7 @@ match SYSTEM:
 
         def set_console_visibility(visibility: bool):
             pass
-        
+
         def is_minimized() -> bool:
             return False
 

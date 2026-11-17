@@ -3,7 +3,7 @@ import typing
 
 import sdl3
 from pyautogui import KEYBOARD_KEYS, MIDDLE, PRIMARY, SECONDARY
-KEYBOARD_KEYS = [key for key in KEYBOARD_KEYS if key.isidentifier()]
+# KEYBOARD_KEYS = [key for key in KEYBOARD_KEYS if key.isidentifier()]
 
 from pyrogyro.math import *
 from pyrogyro.platform_util import keyDown, keyUp, mouseDown, mouseUp, move_mouse
@@ -137,18 +137,22 @@ def to_vec2(in_val):
     else:
         return Vec2()
 
+
 def to_vec3(in_val):
     if isinstance(in_val, Vec3):
         return in_val
     else:
         return Vec3()
 
+
 def to_float(in_val):
     if isinstance(in_val, bool):
         return 1.0 if in_val else 0.0
     return float(in_val)
 
+
 FLOAT_TO_BOOL_THRESH = 0.01
+
 
 def to_bool(in_val):
     if isinstance(in_val, float):

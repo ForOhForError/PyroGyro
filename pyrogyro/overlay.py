@@ -20,6 +20,7 @@ https://github.com/libsdl-org/SDL/pull/14561
 NS_PER_SECOND = 1000000000
 CIRCLE_SIZE = 30
 
+
 class Overlay:
     def __init__(self):
         self.logger = logging.getLogger("Pyrogyro Overlay")

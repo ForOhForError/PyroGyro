@@ -2,6 +2,7 @@ import math
 from dataclasses import dataclass
 from collections import deque
 
+
 def lerp(start, end, progress):
     delta = clamp(progress, 1.0, 0.0)
     deltnt = 1.0 - delta
@@ -87,20 +88,24 @@ class Vec2:
             self.y = self.y / current_len
         return self
 
-def angles_within_delta(a:float, b:float, delta:float):
-    bound_min, bound_max = (a-delta)%360, (a+delta)%360
+
+def angles_within_delta(a: float, b: float, delta: float):
+    bound_min, bound_max = (a - delta) % 360, (a + delta) % 360
     if bound_min > bound_max:
         return not (bound_max < b < bound_min)
     else:
-        return (bound_min <= b <= bound_max)
+        return bound_min <= b <= bound_max
 
-def ease_out_norm(norm:float):
+
+def ease_out_norm(norm: float):
     flipped = 1.0 - norm
     return 1.0 - flipped * flipped
 
-def wrap(num:float, interval_bottom:float, interval_top:float):
-    interval_size = interval_top-interval_bottom
-    return ((num-interval_bottom)%interval_size) + interval_bottom
+
+def wrap(num: float, interval_bottom: float, interval_top: float):
+    interval_size = interval_top - interval_bottom
+    return ((num - interval_bottom) % interval_size) + interval_bottom
+
 
 @dataclass
 class Vec3:
@@ -110,7 +115,7 @@ class Vec3:
 
     def set_value(self, x: float, y: float, z: float):
         self.x, self.y, self.z = x, y, z
-    
+
     def set(self, other):
         self.x, self.y, self.z = other.x, other.y, other.z
 

@@ -125,6 +125,18 @@ class PyroGyroMapper:
             cls._singleton_instance = cls()
         return cls._singleton_instance
 
+    def parse_config_from_file(self, config_path) -> PyroGyroConfig | None:
+        config: PyroGyroConfig | None = None
+        try:
+            with open(config_path, "rb") as config_handle:
+                config = PyroGyroConfig.load_from_file(file_handle=config_handle)
+        except FileNotFoundError:
+            self.logger.info(f"Could not find file {config_path}")
+        except Exception as other_error:
+            self.logger.info(f"Unknown error loading config {config_path}; skipping")
+            self.logger.debug(f"{type(other_error)}: {other_error}")
+        return config
+
     def refresh_autoload_mappings(self):
         config_path_list = set(Path("configs").rglob("*.toml"))
         for config_path in config_path_list:
@@ -133,24 +145,16 @@ class PyroGyroMapper:
                 config_path not in self.autoload_configs
                 or self.autoload_configs[config_path][1] != mod_time
             ):
-                with open(config_path, "rb") as config_handle:
-                    try:
-                        config: PyroGyroConfig = PyroGyroConfig.load_from_file(
-                            file_handle=config_handle
+                config = self.parse_config_from_file(config_path)
+                if config:
+                    if config.autoload:
+                        self.logger.debug(
+                            f"Pushed autoload mapping for file {config_path}"
                         )
-                        if config.autoload:
-                            self.logger.debug(
-                                f"Pushed autoload mapping for file {config_path}"
-                            )
-                            self.autoload_configs[config_path] = (
-                                config,
-                                os.path.getmtime(config_path),
-                            )
-                    except Exception as other_error:
-                        self.logger.info(
-                            f"Unknown error loading config {config_path}; skipping"
+                        self.autoload_configs[config_path] = (
+                            config,
+                            os.path.getmtime(config_path),
                         )
-                        self.logger.debug(f"{type(other_error)}: {other_error}")
         to_remove = []
         for config_path in self.autoload_configs:
             if config_path not in config_path_list:
@@ -207,6 +211,18 @@ class PyroGyroMapper:
                 else:
                     self.logger.info(f"Deactivated all configs.")
 
+    def load_config_from_file(self, file_name: str):
+        config = self.parse_config_from_file(file_name)
+        old_config = self.active_config
+        if config:
+            self.active_config = config
+            if old_config:
+                old_config.unload()
+            if self.active_config:
+                self.logger.info(f"Switched to config {self.active_config.name}")
+                self.active_config.load()
+                self.create_device_map()
+
     def on_focus_change(self, exe_name, window_title):
         self.logger.debug(f"window changed to: {window_title} ({exe_name})")
         self.autoload_refresh_and_evaluate(exe_name, window_title)
@@ -234,33 +250,47 @@ class PyroGyroMapper:
             on_focus_change=self.on_focus_change
         )
 
-    def start_calibration(self):
-        self.logger.info("Starting gyro calibration on all devices")
+    def set_calibration(self, *args, calibrating: bool | None = None):
+        if calibrating == None:
+            self.calibrating = not self.calibrating
+        else:
+            self.calibrating = calibrating
+        if self.calibrating:
+            self.logger.info("Starting gyro calibration on all devices")
+        else:
+            self.logger.info("Ending gyro calibration on all devices")
         for pad in self.pad_map.values():
-            pad.set_gyro_calibrating(True)
+            pad.set_gyro_calibrating(self.calibrating)
 
-    def end_calibration(self):
-        self.logger.info("Ending gyro calibration on all devices")
-        for pad in self.pad_map.values():
-            pad.set_gyro_calibrating(False)
+    def print_keylist(self, *args):
+        self.logger.info(" == MAPPABLE KEYS == ")
+        for key in pyrogyro.io_types.KeyboardKey:
+            self.logger.info(f" * {repr(key.name)[1:-1]}")
+
+    def console_commands(self) -> dict:
+        return {
+            "calibrate": self.set_calibration,
+            "keylist": self.print_keylist,
+            "overlay": self.toggle_overlay,
+            "load": self.load_config_from_file,
+        }
 
     def handle_console_input(self, console_input: str):
         if console_input:
-            match console_input:
-                case com if "calibrate".startswith(com.lower()):
-                    self.calibrating = not self.calibrating
-                    if self.calibrating:
-                        self.start_calibration()
+            commands = console_input.split()
+            command_string = commands[0].lower()
+            match = None
+            for command in self.console_commands():
+                if command.startswith(command_string):
+                    if not match:
+                        match = command
                     else:
-                        self.end_calibration()
-                case com if "keylist".startswith(com.lower()):
-                    self.logger.info(" == MAPPABLE KEYS == ")
-                    for key in pyrogyro.io_types.KeyboardKeyTarget:  # type: ignore
-                        self.logger.info(f" * {key.name}")
-                case com if "overlay".startswith(com.lower()):
-                    self.toggle_overlay()
-                case com if "test_load".startswith(com):
-                    pass
+                        match = None
+                        self.logger.info(f"Ambiguous command {command_string}")
+                        break
+            if match:
+                self.logger.info(f" = {match} = ")
+                self.console_commands()[match](*commands[1:])
 
     def console_input_loop(self):
         try:
@@ -324,12 +354,6 @@ class PyroGyroMapper:
 
     def populate_joystick_list(self, ignore_virtual=True):
         self.logger.info("== Gamepads currently connected: ==")
-        ignore_list = set(
-            # (
-            #     (pypad.vpad.get_vid(), pypad.vpad.get_pid())
-            #     for pypad in self.pyropads.values()
-            # )
-        ).union(set(VID_PID_IGNORE_LIST))
         joystick_ids = sdl3.SDL_GetGamepads(None)  # type: ignore
 
         joysticks = {}
@@ -340,7 +364,7 @@ class PyroGyroMapper:
 
             pid = sdl3.SDL_GetJoystickProductForID(joystick_id)
             vid = sdl3.SDL_GetJoystickVendorForID(joystick_id)
-            is_virtual = (vid, pid) in ignore_list
+            is_virtual = (vid, pid) in VID_PID_IGNORE_LIST
             joy_name_bytes = sdl3.SDL_GetJoystickNameForID(joystick_id)
             joystick_name = (
                 joy_name_bytes.decode() if joy_name_bytes else "[Name Unknown]"  # type: ignore

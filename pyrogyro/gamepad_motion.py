@@ -276,6 +276,13 @@ class GyroToMouse(ConfigBlock):
         smooth_threshold: typing.Optional[float] = None
         tightening_theshold: typing.Optional[float] = None
 
+    def is_gyro_enabled(self):
+        if self.is_input_bound("GYRO_ON"):
+            return bool(self.get_input("GYRO_ON"))
+        elif self.is_input_bound("GYRO_OFF"):
+            return not bool(self.get_input("GYRO_OFF"))
+        return True
+
     def get_smoothed_gyro(self, sample: Vec2):
         self.smooth_buffer.append(sample)
         if len(self.smooth_buffer) > (
@@ -348,46 +355,49 @@ class GyroToMouse(ConfigBlock):
         )
 
     def gyro_camera(self, gyro: Vec3, grav_norm: Vec3, delta_seconds: float):
-        match self.config.mode:
-            case GyroMode.OFF:
-                calibrated_gyro = Vec2(0, 0)
-            case GyroMode.LOCAL:
-                calibrated_gyro = gyro_camera_local(gyro, delta_seconds)
-            case GyroMode.LOCAL_OW:
-                calibrated_gyro = gyro_camera_local_ow(gyro, delta_seconds)
-            case GyroMode.WORLD:
-                calibrated_gyro = gyro_camera_world(gyro, grav_norm, delta_seconds)
-            case GyroMode.PLAYER_TURN:
-                calibrated_gyro = gyro_camera_player_turn(
-                    gyro, grav_norm, delta_seconds
-                )
-            case GyroMode.PLAYER_LEAN:
-                calibrated_gyro = gyro_camera_player_lean(
-                    gyro, grav_norm, delta_seconds
-                )
-            case _:
-                calibrated_gyro = Vec2(0, 0)
-        if self.config.smooth_window:
-            if self.config.smooth_threshold:
-                calibrated_gyro = self.get_tiered_smoothed_gyro(
-                    calibrated_gyro, self.config.smooth_threshold, delta_seconds
-                )
-            else:
-                calibrated_gyro = self.get_smoothed_gyro(calibrated_gyro)
+        if self.is_gyro_enabled():
+            match self.config.mode:
+                case GyroMode.OFF:
+                    calibrated_gyro = Vec2(0, 0)
+                case GyroMode.LOCAL:
+                    calibrated_gyro = gyro_camera_local(gyro, delta_seconds)
+                case GyroMode.LOCAL_OW:
+                    calibrated_gyro = gyro_camera_local_ow(gyro, delta_seconds)
+                case GyroMode.WORLD:
+                    calibrated_gyro = gyro_camera_world(gyro, grav_norm, delta_seconds)
+                case GyroMode.PLAYER_TURN:
+                    calibrated_gyro = gyro_camera_player_turn(
+                        gyro, grav_norm, delta_seconds
+                    )
+                case GyroMode.PLAYER_LEAN:
+                    calibrated_gyro = gyro_camera_player_lean(
+                        gyro, grav_norm, delta_seconds
+                    )
+                case _:
+                    calibrated_gyro = Vec2(0, 0)
+            if self.config.smooth_window:
+                if self.config.smooth_threshold:
+                    calibrated_gyro = self.get_tiered_smoothed_gyro(
+                        calibrated_gyro, self.config.smooth_threshold, delta_seconds
+                    )
+                else:
+                    calibrated_gyro = self.get_smoothed_gyro(calibrated_gyro)
 
-        if self.config.tightening_theshold:
-            calibrated_gyro = self.get_tightened_sample(
-                calibrated_gyro, self.config.tightening_theshold, delta_seconds
+            if self.config.tightening_theshold:
+                calibrated_gyro = self.get_tightened_sample(
+                    calibrated_gyro, self.config.tightening_theshold, delta_seconds
+                )
+
+            gyro_sens_x, gyro_sens_y = self.get_accel_sens(
+                calibrated_gyro,
+                self.config.slow_threshold,
+                self.config.fast_threshold,
+                delta_seconds,
             )
-
-        gyro_sens_x, gyro_sens_y = self.get_accel_sens(
-            calibrated_gyro,
-            self.config.slow_threshold,
-            self.config.fast_threshold,
-            delta_seconds,
-        )
-        calibrated_gyro.x *= gyro_sens_x
-        calibrated_gyro.y *= gyro_sens_y
+            calibrated_gyro.x *= gyro_sens_x
+            calibrated_gyro.y *= gyro_sens_y
+        else:
+            calibrated_gyro = Vec2(0, 0)
         return calibrated_gyro
 
     def gyro_pixels(

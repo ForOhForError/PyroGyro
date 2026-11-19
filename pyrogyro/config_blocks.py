@@ -125,6 +125,8 @@ class PyroGyroConfig:
         sources = set()
         resolution_order = self.get_resolution_order()
         for block in resolution_order:
+            block.clear_input_links()
+        for block in resolution_order:
             if block.is_source():
                 sources.add(block)
             block.process_inputs()
@@ -137,6 +139,7 @@ class PyroGyroConfig:
                         dest = self.blocks.get(dest_name)
                         if dest:
                             dest.set_input(dest_slot, output_value)
+                            dest.link_input(dest_slot, block)
         for block in sources:
             block.process_source_end(delta_time=delta_time)
 
@@ -174,6 +177,7 @@ class ConfigBlock:
         self.pre_init(*args, **kwargs)
 
         self.config: self.Config = self.Config.load_from_dict(data)
+        self.backlinks: dict[str, set[ConfigBlock]] = {}
         self.post_config(*args, **kwargs)
         self.inputs: self.Inputs = self.Inputs()
         self.old_inputs: self.Inputs = self.Inputs()
@@ -254,6 +258,26 @@ class ConfigBlock:
 
     def get_output(self, slot: str):
         return getattr(self.outputs, slot)
+
+    def is_input_bound(self, slot: str):
+        return bool(self.backlinks.get(slot))
+
+    def link_input(self, slot: str, block: "ConfigBlock"):
+        if slot in self.backlinks:
+            self.backlinks[slot].add(block)
+        else:
+            link_set = set()
+            link_set.add(block)
+            self.backlinks[slot] = link_set
+
+    def unlink_input(self, slot: str, block: "ConfigBlock"):
+        inputs = self.backlinks.get(slot)
+        if inputs and (block in inputs):
+            inputs.remove(block)
+
+    def clear_input_links(self):
+        for backlink_set in self.backlinks.values():
+            backlink_set.clear()
 
     @classmethod
     def register_block_class(cls, block_type: str, type_obj: typing.Type):

@@ -4,6 +4,7 @@ __pycache__/*
 *.pyc
 .vscode/*
 configs/testing/*
+plugins/*.pyroplug
 bin/sdl3
 res/web/static/assets/*
 res/web/templates/*

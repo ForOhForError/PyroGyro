@@ -39,6 +39,8 @@ from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 import pyrogyro.overlay
 
+from pyrogyro.plugin_loader import load_plugins_from_directory
+
 import pyrogyro.kbm_blocks
 import pyrogyro.gamepad_motion
 import pyrogyro.mode_blocks
@@ -446,6 +448,8 @@ class PyroGyroMapper:
         self.start_overlay_thread()
         self.web_server.run_in_thread()
         sdl3.SDL_SetEventFilter(event_filter, None)  # type: ignore
+
+        load_plugins_from_directory("plugins")
 
         if self.window_listener:
             self.window_listener.process_current_window()

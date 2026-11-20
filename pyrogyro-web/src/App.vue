@@ -1,4 +1,6 @@
 <script setup>
+import ConfigBlock from './ConfigBlock.vue'
+
 var socket;
 
 function valueToColor(value) {
@@ -60,6 +62,7 @@ try {
   <div style="height:800px">
     <button @click="saveGraph()">Save</button>
     <object id="gamepad" data="gamepad.svg" width="500px" type="image/svg+xml"></object>
+    <ConfigBlock name="Test Block" TYPE="pad" />
   </div>
 </template>
 

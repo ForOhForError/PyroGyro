@@ -5,6 +5,6 @@ __pycache__/*
 .vscode/*
 configs/testing/*
 bin/sdl3
-res/web/static/assets/*
+res/web/static/*
 res/web/templates/*
 pyrogyro.prof

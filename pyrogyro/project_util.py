@@ -133,5 +133,6 @@ def build_windows_dist():
 def build_and_copy_frontend():
     cwd = Path.cwd().joinpath("pyrogyro-web/")
     print(cwd)
+    subprocess.run(["npm", "install"], cwd=cwd, shell=True)
     subprocess.run(["npm", "run", "build"], cwd=cwd, shell=True)
     shutil.copytree("pyrogyro-web/dist", "res/web/static", dirs_exist_ok=True)

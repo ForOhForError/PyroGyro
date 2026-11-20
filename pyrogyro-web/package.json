@@ -12,7 +12,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "baklavajs": "^2.8.1",
     "vue": "^3.5.25"
   },
   "devDependencies": {

@@ -1,21 +1,5 @@
 <script setup>
-import { BaklavaEditor, useBaklava } from "@baklavajs/renderer-vue";
-import "@baklavajs/themes/dist/syrup-dark.css";
-import MyNode from "./nodes";
-const baklava = useBaklava();
 var socket;
-baklava.editor.registerNodeType(MyNode);
-
-baklava.editor.hooks.save.subscribe("sendState", (state, editor) => {
-  console.log(state);
-  if(socket) {
-    socket.send(JSON.stringify(state));
-  }
-});
-
-function saveGraph() {
-  baklava.editor.save();
-}
 
 function valueToColor(value) {
   switch (typeof(value)) {
@@ -75,7 +59,6 @@ try {
 <template>
   <div style="height:800px">
     <button @click="saveGraph()">Save</button>
-    <BaklavaEditor :view-model="baklava" />
     <object id="gamepad" data="gamepad.svg" width="500px" type="image/svg+xml"></object>
   </div>
 </template>

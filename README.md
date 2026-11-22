@@ -104,14 +104,3 @@ You'll need [uv](https://docs.astral.sh/uv/) and a working Python environment (3
  `uv run pyrogyro`
 * Build (to Windows executable):  
  `uv run dist`
-
-## TODO
-
-A todo list of features needed before I feel PyroGyro is launch-ready:
-
-* [ ] Proper Multi-Controller support, with at least a working "duplicate" mode.
-* [ ] Bare-bones web console config manager.
-* [ ] Baseline overlay functionality, with an informational readout at minimum.
-  * [ ] Stretch goal: allow blocks to have render handling.
-* [ ] Track Pad handling, with a stick mode at minimum.
-* [ ] Basic Activators (double press, long press, maybe turbo, etc).

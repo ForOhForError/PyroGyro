@@ -41,7 +41,7 @@ class ColorSequence(ConfigBlock):
         COLOR: Vec3 = field(default_factory=Vec3)
 
     @dataclass
-    class Configs(PyroGyroBaseModel):
+    class Config(PyroGyroBaseModel):
         color_sequence: list[Vec3] = field(default_factory=list)
         index_start: int = 0
         index_end: int = 0

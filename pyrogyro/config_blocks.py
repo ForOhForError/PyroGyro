@@ -279,6 +279,10 @@ class ConfigBlock:
         return cls.Register.BLOCK_TYPES.get(block_type)
 
     @classmethod
+    def get_block_keys(cls):
+        return cls.Register.BLOCK_TYPES.keys()
+
+    @classmethod
     def parse_from_dict(cls, data: typing.Dict[str, typing.Any]):
         block_type = data.get("TYPE", None)
         if block_type == None:

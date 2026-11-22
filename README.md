@@ -1,6 +1,6 @@
 # PyroGyro
 
-Yet Another (Gyro) Gamepad Mapper, written in Python for hackability.
+Node-based controller remapper, written in Python for hackability.
 
 ## Usage
 
@@ -14,9 +14,39 @@ It supports hotplugged devices, and autoloads configuration files as necessary.
 
 Configs are currently specified as a `.toml` file.
 
-Each config has a name, autoload settings, button mappings, and gyro settings.
+The top level specifies some config-wide options:
+`name`: The name of the config, for display purposes.
+`autoload`: If set to `true`, the config will be checked when doing auto-loading; defaults to `false`
+`autoload_exe_name`: A regex for matching against the executable name for autoloading; defaults to `.*` (match everything)
+`autoload_window_name`: A regex for matching against the executable name for autoloading; defaults to `.*` (match everything)
 
-Some example config files are listed below.
+Input can be mapped through specifying nodes/blocks as entries below the top level.
+
+These blocks all must specify the `TYPE` field, to specify what type of block they are.
+
+Other fields will depend on the type of the block; by convention, configuration fields are given in lower_snake_case and mapping fields are given in UPPER_SNAKE_CASE.
+
+Configuration fields are set on a block by setting:
+
+```toml
+name = "SomeStringValue" # Raw toml value; can be int, float, string, etc
+```
+
+Output field destinations are set on a block by setting:
+
+```toml
+OUT_FIELD = "destination.IN_FIELD" # Dotted string; maps the output OUT_FIELD to the IN_FIELD input of the block named "destination"
+```
+
+Multiple destinations can be used by setting an array for the field value:
+
+```toml
+OUT_FIELD = ["destination.IN_FIELD", "destination2.IN_FIELD_2"] # Just an array of the same format strings
+```
+
+Availible block types can be found by entering the `block` command into the console window.
+
+Configuration for a given block can be found by entering the `block BLOCK_NAME_HERE` command into the console window.
 
 Note that autoloading will only check files in the `configs/` directory (though it will check sub-directories)
 
@@ -29,8 +59,6 @@ autoload_exe_name = ".*"
 autoload_window_name = ".*"
 
 [ pad ]
-# match_controller_name = ".*" # Regex for controller name, defaults to accepting anything
-# multi_pad_mode = "duplicate" # Determines how to handle multiple pads
 TYPE = "PAD"
 N = "xbox.Y"
 S = "xbox.A"
@@ -57,6 +85,12 @@ TYPE = "XBOX"
 RUMBLE = "pad.RUMBLE"
 ```
 
+## AI Policy
+
+AI (Currently being defined here as LLMs in any form, I am not interested in discussing semantics) has not and will not be used in the development of this project.
+
+PRs with AI-generated or AI-consulted code will be closed without discussion. Attempts to circumvent this policy will result in being permanently blocked from contributing to this repository.
+
 ## Development
 
 You'll need [uv](https://docs.astral.sh/uv/) and a working Python environment (3.11 and up)
@@ -71,8 +105,13 @@ You'll need [uv](https://docs.astral.sh/uv/) and a working Python environment (3
 * Build (to Windows executable):  
  `uv run dist`
 
-## AI Policy
+## TODO
 
-AI (Currently being defined here as LLMs in any form, I am not interested in discussing semantics) has not and will not be used in the development of this project.
+A todo list of features needed before I feel PyroGyro is launch-ready:
 
-PRs with AI-generated or AI-consulted code will be closed without discussion. Attempts to circumvent this policy will result in being permanently blocked from contributing to this repository.
+* [ ] Proper Multi-Controller support, with at least a working "duplicate" mode.
+* [ ] Bare-bones web console config manager.
+* [ ] Baseline overlay functionality, with an informational readout at minimum.
+  * [ ] Stretch goal: allow blocks to have render handling.
+* [ ] Track Pad handling, with a stick mode at minimum.
+* [ ] Basic Activators (double press, long press, maybe turbo, etc).

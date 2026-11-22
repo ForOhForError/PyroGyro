@@ -28,7 +28,7 @@ from pyrogyro.constants import (
     resource_location,
 )
 from pyrogyro.math import *
-from pyrogyro.config_blocks import PyroGyroConfig
+from pyrogyro.config_blocks import ConfigBlock, PyroGyroConfig
 from pyrogyro.platform_util import (
     init_window_listener,
     set_console_title,
@@ -269,12 +269,38 @@ class PyroGyroMapper:
         for key in pyrogyro.io_types.KeyboardKey:
             self.logger.info(f" * {repr(key.name)[1:-1]}")
 
+    def print_registered_block(self, *args):
+        if len(args):
+            block_type = args[0]
+            block_class: type[ConfigBlock] | None = ConfigBlock.get_block_class(
+                block_type
+            )
+            if block_class:
+                self.logger.info(f"== {block_type} ==")
+                self.logger.info(f"= Config =")
+                for field in block_class.Config.fields():
+                    self.logger.info(f" * {field}")
+                self.logger.info(f"= Input =")
+                for field in block_class.Inputs.fields():
+                    self.logger.info(f" * {field}")
+                self.logger.info(f"= Output =")
+                for field in block_class.Outputs.fields():
+                    self.logger.info(f" * {field}")
+                self.logger.info(f"====")
+            else:
+                self.logger.info(f"No block with name '{block_type}'")
+        else:
+            self.logger.info("== Blocks ==")
+            for block_type in ConfigBlock.get_block_keys():
+                self.logger.info(f" * {block_type}")
+
     def console_commands(self) -> dict:
         return {
             "calibrate": self.set_calibration,
             "keylist": self.print_keylist,
             "overlay": self.toggle_overlay,
             "load": self.load_config_from_file,
+            "block": self.print_registered_block,
         }
 
     def handle_console_input(self, console_input: str):
@@ -291,7 +317,6 @@ class PyroGyroMapper:
                         self.logger.info(f"Ambiguous command {command_string}")
                         break
             if match:
-                self.logger.info(f" = {match} = ")
                 self.console_commands()[match](*commands[1:])
 
     def console_input_loop(self):

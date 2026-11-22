@@ -61,6 +61,7 @@ class PyroGyroConfig:
         self.blocks: dict[str, ConfigBlock] = {}
         self.name = data.get("name", "PyroGyro Config")
         self.autoload = data.get("autoload", False)
+        self.multipad_mode = data.get("multipad_mode", "duplicate")
         self.autoload_exe_name = data.get("autoload_exe_name", ".*")
         self.autoload_window_name = data.get("autoload_window_name", ".*")
         for key, value in data.items():
@@ -138,8 +139,8 @@ class PyroGyroConfig:
                     for dest_name, dest_slot in block.get_destinations(slot):
                         dest = self.blocks.get(dest_name)
                         if dest:
-                            dest.set_input(dest_slot, output_value)
                             dest.link_input(dest_slot, block)
+                            dest.set_input(dest_slot, output_value)
         for block in sources:
             block.process_source_end(delta_time=delta_time)
 
@@ -184,7 +185,6 @@ class ConfigBlock:
         self.outputs: self.Outputs = self.Outputs()
         self._output_dests: dict[str, str | list[str]] = {}
         self._loaded: bool = False
-        self._suppress = set()
         for key in data:
             if key == "TYPE" or key in self.config_slots():
                 pass
@@ -200,9 +200,6 @@ class ConfigBlock:
     def post_config(self, *args, **kwargs):
         pass
 
-    def suppress_set(self) -> typing.Set[str]:
-        return self._suppress
-
     def print_config(self):
         for conf_slot in self.Config.fields():
             logging.debug(f"{conf_slot} = {getattr(self.config, conf_slot)}")
@@ -210,7 +207,6 @@ class ConfigBlock:
             logging.debug(f"{dest_source} -> {self._output_dests[dest_source]}")
 
     def reset_io(self):
-        self._suppress.clear()
         self.old_inputs.reset_io()
         self.inputs.reset_io()
         self.outputs.reset_io()
@@ -269,11 +265,6 @@ class ConfigBlock:
             link_set = set()
             link_set.add(block)
             self.backlinks[slot] = link_set
-
-    def unlink_input(self, slot: str, block: "ConfigBlock"):
-        inputs = self.backlinks.get(slot)
-        if inputs and (block in inputs):
-            inputs.remove(block)
 
     def clear_input_links(self):
         for backlink_set in self.backlinks.values():
@@ -366,28 +357,3 @@ class ConfigBlock:
 
     def __del__(self):
         self.deactivate()
-
-
-# Some basic operator blocks
-
-
-class Multiplier(ConfigBlock):
-    class Inputs(PyroGyroBaseModel):
-        IN: Vec2 | Vec3 | float = Vec2()
-
-    class Outputs(PyroGyroBaseModel):
-        OUT: Vec2 | Vec3 | float = Vec2()
-
-    class Config(PyroGyroBaseModel):
-        factor: float = 1
-
-    def process(self, delta_time: float = 0):
-        try:
-            val = self.inputs.IN
-            val = val * self.config.factor
-            self.set_output("OUT", val)
-        except Exception:
-            pass
-
-
-ConfigBlock.register_block_class("MULT", Multiplier)

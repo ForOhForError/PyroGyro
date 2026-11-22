@@ -43,7 +43,6 @@ class InputPad(ConfigBlock):
     @dataclass
     class Config(PyroGyroBaseModel):
         controller_name: str = ".*"
-        multi_pad_mode: str = "duplicate"
         fancy_gravity: bool = False
 
     def __del__(self):

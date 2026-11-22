@@ -39,11 +39,13 @@ from pyrogyro.system_tray import SystemTray
 from pyrogyro.web import WebServer
 import pyrogyro.overlay
 
+import pyrogyro.misc_blocks
 import pyrogyro.kbm_blocks
 import pyrogyro.gamepad_motion
 import pyrogyro.mode_blocks
 import pyrogyro.color_led
 
+pyrogyro.misc_blocks.register_blocks()
 pyrogyro.kbm_blocks.register_blocks()
 pyrogyro.gamepad_motion.register_blocks()
 pyrogyro.mode_blocks.register_blocks()

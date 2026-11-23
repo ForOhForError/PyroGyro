@@ -87,7 +87,7 @@ match SYSTEM:
                 alpha = ctypes.c_int64(0)
                 flags = ctypes.c_int64(0)
                 if style & WS_EX_LAYERED:
-                    user32.GetLayeredWindowAttributesA(
+                    user32.GetLayeredWindowAttributes(
                         hwnd,
                         ctypes.pointer(key),
                         ctypes.pointer(alpha),

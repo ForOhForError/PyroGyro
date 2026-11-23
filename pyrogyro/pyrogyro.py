@@ -33,6 +33,7 @@ from pyrogyro.platform_util import (
     init_window_listener,
     set_console_title,
     set_console_visibility,
+    is_minimized,
 )
 from pyrogyro.pyrogyro_pad import InputPad
 from pyrogyro.system_tray import SystemTray
@@ -207,7 +208,10 @@ class PyroGyroMapper:
                 if old_mapping:
                     old_mapping.unload()
                 if self.active_config:
-                    self.logger.info(f"Switched to config {self.active_config.name}")
+                    log_line = f"Switched to config {self.active_config.name}"
+                    self.logger.info(log_line)
+                    if self.overlay:
+                        self.overlay.log_to_overlay(log_line)
                     self.active_config.load()
                     self.create_device_map()
                 else:
@@ -321,11 +325,18 @@ class PyroGyroMapper:
 
     def console_input_loop(self):
         try:
-            while True:
+            while self.running:
                 console_input = input("")
                 self.handle_console_input(console_input)
         except (EOFError, KeyboardInterrupt):
             pass
+
+    def minimize_to_tray_loop(self):
+        while self.running:
+            if is_minimized():
+                set_console_visibility(False)
+                self.visible = False
+            sdl3.SDL_Delay(1000)
 
     def overlay_loop(self):
         if self.overlay:
@@ -333,6 +344,9 @@ class PyroGyroMapper:
 
     def start_console_input_thread(self):
         threading.Thread(target=self.console_input_loop, daemon=True).start()
+
+    def start_minimize_to_tray_thread(self):
+        threading.Thread(target=self.minimize_to_tray_loop, daemon=True).start()
 
     def start_overlay_thread(self):
         threading.Thread(target=self.overlay_loop, daemon=True).start()
@@ -471,6 +485,7 @@ class PyroGyroMapper:
         self.init_window_listener()
         self.start_console_input_thread()
         self.start_overlay_thread()
+        self.start_minimize_to_tray_thread()
         self.web_server.run_in_thread()
         sdl3.SDL_SetEventFilter(event_filter, None)  # type: ignore
 

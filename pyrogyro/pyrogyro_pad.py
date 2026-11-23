@@ -16,7 +16,7 @@ from pyrogyro.io_types import *
 from pyrogyro.math import *
 
 from pyrogyro.config_blocks import ConfigBlock, PyroGyroBaseModel
-
+import pyrogyro.pyrogyro
 from dataclasses import dataclass, field, make_dataclass
 
 PAD_OUTPUTS = [
@@ -88,18 +88,17 @@ class InputPad(ConfigBlock):
 
     def process(self, delta_time: float = 0):
         if self.gyro_update:
-            delta_max = 5 / DEFAULT_POLL_RATE
+            delta_max = 5 / pyrogyro.pyrogyro.PyroGyroMapper.instance().poll_rate
             if delta_time > delta_max:
                 self.logger.debug(f"got delayed update clocking at {delta_time}")
                 delta_time = 0
             self.outputs.GYRO.gyro = self.gyro_calibration.calibrated(
                 self.outputs.GYRO.gyro
             )
-            adjusted_delta = delta_time if delta_time <= delta_max else 0
             if self.config.fancy_gravity:
-                sensor_fusion_gravity_fancy(self.outputs.GYRO, adjusted_delta)
+                sensor_fusion_gravity_fancy(self.outputs.GYRO, delta_time)
             else:
-                sensor_fusion_gravity(self.outputs.GYRO, adjusted_delta)
+                sensor_fusion_gravity(self.outputs.GYRO, delta_time)
         self.gyro_update = False
 
     def process_source_end(self, delta_time: float = 0):

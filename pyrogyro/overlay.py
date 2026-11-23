@@ -8,6 +8,8 @@ import logging
 from pyrogyro.constants import resource_location, OVERLAY_FPS_SHOWN, OVERLAY_FPS_HIDDEN
 from pyrogyro.platform_util import set_window_passthrough
 
+from queue import Queue, Empty
+
 """
 Overlay proof of concept. Uses windows-only platform specific code for enabling mouse passthrough, currently
 ported from the PR for adding this support natively
@@ -19,6 +21,21 @@ https://github.com/libsdl-org/SDL/pull/14561
 
 NS_PER_SECOND = 1000000000
 CIRCLE_SIZE = 30
+FONT_SIZE = 20
+
+TEXT_FADE_TIME = 1
+TEXT_FADE_AFTER = 4
+
+
+def get_text_alpha(lifetime_seconds: float):
+    if lifetime_seconds >= TEXT_FADE_AFTER:
+        alpha = 1 - ((lifetime_seconds - TEXT_FADE_AFTER) / TEXT_FADE_TIME)
+        if alpha <= 0:
+            return 0
+        else:
+            return int(255 * alpha)
+    else:
+        return 255
 
 
 class Overlay:
@@ -37,6 +54,9 @@ class Overlay:
             sdl3.SDL_POINTER[sdl3.SDL_Window](),
             sdl3.SDL_POINTER[sdl3.SDL_Renderer](),
         )
+
+        self.log_texts = []
+        self.log_queue = Queue()
 
         success = sdl3.SDL_CreateWindowAndRenderer(
             win_name,
@@ -61,34 +81,61 @@ class Overlay:
         self.run = True
         self.hidden = True
 
+        self.init_assets()
+
+    def init_assets(self):
+        self.textures = {}
+        renderer = self.renderer_ptr.contents
+        self.textures["circle"] = sdl3.IMG_LoadTexture(
+            renderer, resource_location("test.png").encode()
+        )
+        self.font = sdl3.TTF_OpenFont(
+            resource_location("ttf/whitrabt.ttf").encode(), FONT_SIZE
+        )
+        self.font_emoji = sdl3.TTF_OpenFont(
+            resource_location("ttf/notoemoji.ttf").encode(), FONT_SIZE
+        )
+        sdl3.TTF_AddFallbackFont(self.font, self.font_emoji)
+        self.text_engine = sdl3.TTF_CreateRendererTextEngine(renderer)
+
+    def log_to_overlay(self, text, color=(255, 255, 255)):
+        self.log_queue.put((text, color))
+
+    def read_log_queue(self):
+        now = time.time_ns()
+        try:
+            while True:
+                text, color = self.log_queue.get_nowait()
+                self.log_texts.append(
+                    (
+                        sdl3.TTF_CreateText(
+                            self.text_engine, self.font, text.encode(), 0
+                        ),
+                        color,
+                        now,
+                    )
+                )
+        except Empty:
+            pass
+
+    def set_hidden(self, hidden: bool):
+        if hidden != self.hidden:
+            self.hidden = hidden
+            window = self.window_ptr.contents
+            if self.hidden:
+                self.fps_target = OVERLAY_FPS_HIDDEN
+                sdl3.SDL_HideWindow(window)
+                set_window_passthrough(window, False)
+            else:
+                self.fps_target = OVERLAY_FPS_SHOWN
+                sdl3.SDL_ShowWindow(window)
+                set_window_passthrough(window, True)
+
     def toggle_hidden(self):
-        self.hidden = not self.hidden
-        window = self.window_ptr.contents
-        if self.hidden:
-            self.fps_target = OVERLAY_FPS_HIDDEN
-            sdl3.SDL_HideWindow(window)
-            set_window_passthrough(window, False)
-        else:
-            self.fps_target = OVERLAY_FPS_SHOWN
-            sdl3.SDL_ShowWindow(window)
-            set_window_passthrough(window, True)
+        self.set_hidden(not self.hidden)
 
     def display_loop(self):
         window, renderer = self.window_ptr.contents, self.renderer_ptr.contents
-        gHelloWorld = sdl3.IMG_LoadTexture(
-            renderer, resource_location("test.png").encode()
-        )
-        font = sdl3.TTF_OpenFont(resource_location("ttf/whitrabt.ttf").encode(), 20)
-        font_emoji = sdl3.TTF_OpenFont(
-            resource_location("ttf/notoemoji.ttf").encode(), 20
-        )
-        sdl3.TTF_AddFallbackFont(font, font_emoji)
-
-        text_engine = sdl3.TTF_CreateRendererTextEngine(renderer)
-        text = sdl3.TTF_CreateText(
-            text_engine, font, "Video Games \N{VIDEO GAME}".encode(), 0
-        )
-        sdl3.TTF_SetTextColor(text, 255, 255, 255, 255)
 
         src_rect = sdl3.SDL_FRect(0, 0, 100, 100)
         dest_rec = sdl3.SDL_FRect(0, 0, CIRCLE_SIZE, CIRCLE_SIZE)
@@ -102,12 +149,28 @@ class Overlay:
 
         start_time = time.time_ns()
         while self.run:
+            self.read_log_queue()
             new_time = time.time_ns()
             ns_per_poll = int(NS_PER_SECOND / self.fps_target)
             delta_time = new_time - start_time
             start_time = new_time
             sdl3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)
             sdl3.SDL_RenderClear(renderer)
+
+            line_y = 5.0
+            font_size = float(sdl3.TTF_GetFontSize(self.font))
+            for log_line in self.log_texts[:]:
+                log_text, color, life_begin = log_line
+                alpha = get_text_alpha((new_time - life_begin) / NS_PER_SECOND)
+                if alpha == 0:
+                    self.log_texts.remove(log_line)
+                    sdl3.TTF_DestroyText(log_text)
+                else:
+                    # self.set_hidden(False)
+                    sdl3.TTF_SetTextColor(log_text, color[0], color[1], color[2], alpha)
+                    sdl3.TTF_DrawRendererText(log_text, 5, int(line_y))
+                    line_y += (font_size + 3) * log_text.contents.num_lines
+
             step += 60 * delta_time / NS_PER_SECOND
             step %= 360
             rads = math.radians(step)
@@ -115,7 +178,9 @@ class Overlay:
             y_pos = center[1] - CIRCLE_SIZE / 2 + rad * math.sin(rads)
             dest_rec.x = x_pos
             dest_rec.y = y_pos
-            sdl3.SDL_RenderTexture(renderer, gHelloWorld, src_rect_ptr, dest_rec_ptr)
+            sdl3.SDL_RenderTexture(
+                renderer, self.textures["circle"], src_rect_ptr, dest_rec_ptr
+            )
 
             sdl3.TTF_DrawRendererText(text, x_pos, y_pos)
 

@@ -1,6 +1,5 @@
 import logging
 import re
-import typing
 
 import sdl3
 import vgamepad as vg

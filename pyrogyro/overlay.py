@@ -5,6 +5,8 @@ import math
 import sdl3
 import logging
 
+import pyrogyro.pyrogyro
+
 from pyrogyro.constants import resource_location, OVERLAY_FPS_SHOWN, OVERLAY_FPS_HIDDEN
 from pyrogyro.platform_util import set_window_passthrough
 
@@ -156,7 +158,27 @@ class Overlay:
             start_time = new_time
             sdl3.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0)
             sdl3.SDL_RenderClear(renderer)
+            screen_rect = sdl3.SDL_Rect(0, 0, 0, 0)
+            mouse_x, mouse_y = ctypes.c_float(0), ctypes.c_float(0)
+            mouse_x_pointer, mouse_y_pointer = (
+                sdl3.SDL_POINTER[ctypes.c_float](mouse_x),
+                sdl3.SDL_POINTER[ctypes.c_float](mouse_y),
+            )
+            sdl3.SDL_GetGlobalMouseState(mouse_x_pointer, mouse_y_pointer)
+            pix_x, pix_y = int(mouse_x.value), int(mouse_y.value)
+            mouse_point = sdl3.SDL_Point(pix_x, pix_y)
+            display_no = sdl3.SDL_GetDisplayForPoint(mouse_point)
+            sdl3.SDL_GetDisplayBounds(display_no, screen_rect)
 
+            sdl3.SDL_SetWindowSize(window, screen_rect.w, screen_rect.h)
+            sdl3.SDL_SetWindowPosition(window, screen_rect.x, screen_rect.y)
+
+            # Render application
+            pyrogyro.pyrogyro.PyroGyroMapper.instance().render(
+                renderer, screen_rect.w, screen_rect.h, delta_time
+            )
+
+            # Render log lines
             line_y = 5.0
             font_size = float(sdl3.TTF_GetFontSize(self.font))
             for log_line in self.log_texts[:]:
@@ -171,9 +193,11 @@ class Overlay:
                     sdl3.TTF_DrawRendererText(log_text, 5, int(line_y))
                     line_y += (font_size + 3) * log_text.contents.num_lines
 
+            # Render test pattern
             step += 60 * delta_time / NS_PER_SECOND
             step %= 360
             rads = math.radians(step)
+            center = pix_x - screen_rect.x, pix_y - screen_rect.y
             x_pos = center[0] - CIRCLE_SIZE / 2 + rad * math.cos(rads)
             y_pos = center[1] - CIRCLE_SIZE / 2 + rad * math.sin(rads)
             dest_rec.x = x_pos
@@ -181,26 +205,6 @@ class Overlay:
             sdl3.SDL_RenderTexture(
                 renderer, self.textures["circle"], src_rect_ptr, dest_rec_ptr
             )
-
-            sdl3.TTF_DrawRendererText(text, x_pos, y_pos)
-
-            mouse_x, mouse_y = ctypes.c_float(0), ctypes.c_float(0)
-            mouse_x_pointer, mouse_y_pointer = (
-                sdl3.SDL_POINTER[ctypes.c_float](mouse_x),
-                sdl3.SDL_POINTER[ctypes.c_float](mouse_y),
-            )
-            sdl3.SDL_GetGlobalMouseState(mouse_x_pointer, mouse_y_pointer)
-            pix_x, pix_y = int(mouse_x.value), int(mouse_y.value)
-            mouse_point = sdl3.SDL_Point(pix_x, pix_y)
-            display_no = sdl3.SDL_GetDisplayForPoint(mouse_point)
-
-            screen_rect = sdl3.SDL_Rect(0, 0, 0, 0)
-            sdl3.SDL_GetDisplayBounds(display_no, screen_rect)
-
-            center = pix_x - screen_rect.x, pix_y - screen_rect.y
-
-            sdl3.SDL_SetWindowSize(window, screen_rect.w, screen_rect.h)
-            sdl3.SDL_SetWindowPosition(window, screen_rect.x, screen_rect.y)
 
             sdl3.SDL_RenderPresent(renderer)
 

@@ -475,6 +475,16 @@ class PyroGyroMapper:
             delay_ns = ns_per_poll - poll_ns
             sdl3.SDL_DelayNS(delay_ns)  # type: ignore
 
+    def render(
+        self,
+        renderer: sdl3.SDL_POINTER[sdl3.SDL_Renderer],
+        width: int,
+        height: int,
+        delta_time_ns: int,
+    ):
+        if self.active_config:
+            self.active_config.render(renderer, width, height, delta_time_ns)
+
     def run(self):
         self.logger.info("PyroGyro Starting")
         for module_name in SHOW_STARTUP_VERSION_MODULES:

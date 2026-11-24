@@ -5,6 +5,8 @@ import typing
 import logging
 import tomlkit
 
+import sdl3
+
 from pyrogyro.constants import DEBUG
 from pyrogyro.io_types import to_bool
 from pyrogyro.math import *
@@ -122,6 +124,16 @@ class PyroGyroConfig:
         for block in self.blocks.values():
             block.reset_io()
 
+    def render(
+        self,
+        renderer: sdl3.SDL_POINTER[sdl3.SDL_Renderer],
+        width: int,
+        height: int,
+        delta_time_ns: int,
+    ):
+        for block in self.blocks.values():
+            block.render(renderer, width, height, delta_time_ns)
+
     def process(self, delta_time: float = 0.0):
         sources = set()
         resolution_order = self.get_resolution_order()
@@ -196,6 +208,15 @@ class ConfigBlock:
             else:
                 CONFIG_LOGGER.error(f"{type(self).__name__} has no slot {key}")
         self.post_init(*args, **kwargs)
+
+    def render(
+        self,
+        renderer: sdl3.SDL_POINTER[sdl3.SDL_Renderer],
+        width: int,
+        height: int,
+        delta_time_ns: int,
+    ):
+        pass
 
     def post_config(self, *args, **kwargs):
         pass
